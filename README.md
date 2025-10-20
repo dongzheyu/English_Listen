@@ -90,4 +90,4 @@ MIT License
 
 ## 作者
 
-[Your Name]
+JetCPP Studio

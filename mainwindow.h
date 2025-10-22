@@ -17,6 +17,9 @@
 #include <QApplication>
 #include <QPalette>
 #include <QColor>
+#include <QDir>
+#include <QFile>
+#include <QProcess>
 #include <windows.h>
 #include <vector>
 #include <string>
@@ -42,6 +45,7 @@ private slots:
     void onRemoveWord();
     void onClearWords();
     void onToggleTheme();
+    void onRepeatWord();  // 新增：重复朗读当前单词
 
 private:
     // UI控件
@@ -64,6 +68,7 @@ private:
     
     // 测试界面控件
     QLabel *countdownLabel;
+    QPushButton *repeatButton;  // 新增：重复朗读按钮
     QWidget *testWidget;
     
     // 功能相关

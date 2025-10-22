@@ -87,7 +87,15 @@ void MainWindow::setupUI()
         font.setPointSize(48);
         font.setBold(true);
         countdownLabel->setFont(font);
+        
+        // 创建重复朗读按钮
+        repeatButton = new QPushButton("再读一遍", testWidget);
+        repeatButton->setMaximumWidth(100);
+        repeatButton->setMaximumHeight(30);
+        connect(repeatButton, &QPushButton::clicked, this, &MainWindow::onRepeatWord);
+        
         testLayout->addWidget(countdownLabel);
+        testLayout->addWidget(repeatButton, 0, Qt::AlignCenter);
         testWidget->hide(); // 默认隐藏测试界面
         
         // 设置主界面布局
@@ -218,8 +226,13 @@ void MainWindow::onRemoveWord()
     QListWidgetItem *item = wordList->currentItem();
     if (item) {
         int row = wordList->row(item);
+        // 从内存中删除单词
         words.erase(words.begin() + row);
+        // 从界面列表中删除单词
         delete wordList->takeItem(row);
+        
+        // 同时从词库文件中删除单词
+        saveWordsToFile("wordlist.txt");
     } else {
         QMessageBox::information(this, "提示", "请选择要删除的单词");
     }
@@ -262,7 +275,7 @@ void MainWindow::onStartTest()
     }
     
     currentIndex = 0;
-    if (startButton) startButton->setEnabled(false);
+    startButton->setEnabled(false);
     
     // 切换到测试界面
     showTestInterface();
@@ -280,7 +293,13 @@ void MainWindow::onNextWord()
     
     if (countdown <= 0) {
         if (currentIndex < words.size()) {
-            // 朗读当前单词
+            // 显示正在朗读提示
+            if (countdownLabel) countdownLabel->setText("正在朗读");
+            
+            // 处理界面事件，确保标签更新
+            QCoreApplication::processEvents();
+            
+            // 朗读当前单词（隐藏CMD窗口）
             speakWord(words[currentIndex]);
         }
         
@@ -291,11 +310,30 @@ void MainWindow::onNextWord()
             if (countdownLabel) countdownLabel->setText(QString::number(countdown));
         } else {
             if (timer) timer->stop();
-            if (startButton) startButton->setEnabled(true);
+            startButton->setEnabled(true);
             // 测试结束，先显示提示框，然后在提示框关闭后返回主界面
             QMessageBox::information(this, "提示", "听写测试结束");
             showMainInterface();
         }
+    }
+}
+
+void MainWindow::onRepeatWord()
+{
+    // 确保当前索引有效
+    if (currentIndex < words.size()) {
+        // 显示正在朗读提示
+        if (countdownLabel) countdownLabel->setText("正在朗读");
+        
+        // 处理界面事件，确保标签更新
+        QCoreApplication::processEvents();
+        
+        // 朗读当前单词
+        speakWord(words[currentIndex]);
+        
+        // 重置倒计时
+        countdown = 5;
+        if (countdownLabel) countdownLabel->setText(QString::number(countdown));
     }
 }
 
@@ -336,6 +374,33 @@ void MainWindow::saveWordsToFile(const QString &filename)
 
 void MainWindow::speakWord(const std::string &word)
 {
-    std::string message = "echo CreateObject(\"SAPI.SpVoice\").Speak(\"" + word + "\") > %temp%\\temp_speak.vbs && cscript //nologo %temp%\\temp_speak.vbs && del %temp%\\temp_speak.vbs";
-    system(message.c_str());
+    // 使用QProcess以隐藏方式执行VBS脚本
+    QString vbsCode = QString("CreateObject(\"SAPI.SpVoice\").Speak \"%1\"").arg(QString::fromStdString(word));
+    
+    // 创建临时VBS文件（使用Windows路径分隔符）
+    QString tempPath = QDir::tempPath();
+    QString vbsFile = tempPath + "\\temp_speak.vbs";  // 使用双反斜杠
+    
+    QFile file(vbsFile);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        out << vbsCode;
+        file.close();
+        
+        // 确保文件创建成功后再执行
+        if (QFile::exists(vbsFile)) {
+            // 使用完整路径执行wscript
+            QString program = "wscript.exe";
+            QStringList arguments;
+            arguments << "//nologo" << vbsFile;
+            
+            // 使用QProcess执行，不使用startDetached
+            QProcess process;
+            process.start(program, arguments);
+            process.waitForFinished(-1); // 等待执行完成
+            
+            // 立即删除临时文件
+            QFile::remove(vbsFile);
+        }
+    }
 }

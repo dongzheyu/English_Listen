@@ -30,5 +30,7 @@ target_link_libraries(QtEnglishListen
 
 # Windows特定设置
 if(WIN32)
+    # 将Qt应用程序设置为Windows GUI应用程序，避免显示控制台窗口
+    set_target_properties(QtEnglishListen PROPERTIES WIN32_EXECUTABLE ON)
     target_compile_definitions(QtEnglishListen PRIVATE UNICODE _UNICODE)
 endif()

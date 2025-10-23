@@ -9,11 +9,6 @@ set(CMAKE_AUTOUIC ON)
 # 查找Qt6组件
 find_package(Qt6 COMPONENTS Core Widgets Multimedia REQUIRED)
 
-# 添加可执行文件
-add_executable(English_Listen
-    main.cpp
-)
-
 # 添加Qt版本可执行文件
 add_executable(QtEnglishListen
     qt_main.cpp
@@ -32,5 +27,4 @@ target_link_libraries(QtEnglishListen
 if(WIN32)
     # 将Qt应用程序设置为Windows GUI应用程序，避免显示控制台窗口
     set_target_properties(QtEnglishListen PROPERTIES WIN32_EXECUTABLE ON)
-    target_compile_definitions(QtEnglishListen PRIVATE UNICODE _UNICODE)
 endif()

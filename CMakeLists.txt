@@ -7,7 +7,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # 查找Qt6组件
-find_package(Qt6 COMPONENTS Core Widgets Multimedia REQUIRED)
+find_package(Qt6 COMPONENTS Core Widgets REQUIRED)
 
 # 添加Qt版本可执行文件
 add_executable(QtEnglishListen
@@ -19,8 +19,7 @@ add_executable(QtEnglishListen
 # 链接Qt6库
 target_link_libraries(QtEnglishListen 
     Qt6::Core 
-    Qt6::Widgets 
-    Qt6::Multimedia
+    Qt6::Widgets
 )
 
 # Windows特定设置

@@ -1,0 +1,55 @@
+#include <windows.h>
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "JetCPP"
+            VALUE "FileDescription", "English Listening Practice Application"
+            VALUE "FileVersion", "1.0.0.0"
+            VALUE "InternalName", "English_Listen"
+            VALUE "LegalCopyright", "Copyright (C) 2025 JetCPP. Licensed under the MIT License."
+            VALUE "OriginalFilename", "QtEnglishListen.exe"
+            VALUE "ProductName", "English Listen"
+            VALUE "ProductVersion", "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Define the icon for the application
+// IDI_ICON1 ICON DISCARDABLE "app_icon.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Manifest
+//
+
+// For Windows Vista and later, add a manifest to enable visual styles
+// CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"

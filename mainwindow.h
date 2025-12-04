@@ -33,6 +33,13 @@
 #include <QInputDialog>
 #include <QSettings>
 #include <QMap>
+#include <QRegularExpression>
+#include <QDialog>
+#include <QListWidget>
+#include <QDialogButtonBox>
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QDirIterator>
 #include <cmath>
 #include <windows.h>
 #include <vector>

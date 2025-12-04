@@ -74,8 +74,12 @@ MainWindow::MainWindow(QWidget *parent)
     welcomeTimer = new QTimer(this);
     connect(welcomeTimer, &QTimer::timeout, this, &MainWindow::onUpdateWelcomeAnimation);
     
-    // 加载默认词库
-    loadWordsFromFile("wordlist.txt");
+    // 不再自动加载默认词库
+    // QString defaultWordlist = "wordlist.txt";
+    // QFile defaultFile(defaultWordlist);
+    // if (defaultFile.exists()) {
+    //     loadWordsFromFile(defaultWordlist);
+    // }
     
     // 更新欢迎语
     updateWelcomeMessage();
@@ -602,32 +606,46 @@ void MainWindow::onViewWords()
 {
     // 如果词库目录有效且有可用的词库文件，让用户选择加载
     if (isValidWordlistDir && !wordlistFiles.isEmpty()) {
-        QMessageBox msgBox;
-        msgBox.setWindowTitle("加载词库");
-        msgBox.setText("检测到可用的词库文件，是否加载？");
-        QPushButton *loadButton = msgBox.addButton("加载词库", QMessageBox::ActionRole);
-        QPushButton *skipButton = msgBox.addButton("跳过", QMessageBox::ActionRole);
-        msgBox.setDefaultButton(skipButton);
+        // 创建选择对话框
+        QDialog dialog(this);
+        dialog.setWindowTitle("选择词库文件");
+        dialog.resize(400, 300);
         
-        msgBox.exec();
+        QVBoxLayout layout(&dialog);
+        QLabel label("请选择要加载的词库文件（可多选）：", &dialog);
+        layout.addWidget(&label);
         
-        if (msgBox.clickedButton() == loadButton) {
-            // 显示文件选择对话框，允许多选
-            QStringList fileNames = QFileDialog::getOpenFileNames(
-                this,
-                "选择词库文件",
-                wordlistDirPath,
-                "Text Files (*.txt)"
-            );
-            
-            if (!fileNames.isEmpty()) {
+        QListWidget fileListView(&dialog);
+        fileListView.setSelectionMode(QAbstractItemView::MultiSelection);
+        
+        // 添加文件名到列表
+        for (auto it = wordlistFiles.constBegin(); it != wordlistFiles.constEnd(); ++it) {
+            fileListView.addItem(it.key());
+        }
+        
+        layout.addWidget(&fileListView);
+        
+        QDialogButtonBox buttonBox(Qt::Horizontal, &dialog);
+        QPushButton *loadButton = buttonBox.addButton("加载", QDialogButtonBox::AcceptRole);
+        QPushButton *skipButton = buttonBox.addButton("跳过", QDialogButtonBox::RejectRole);
+        layout.addWidget(&buttonBox);
+        
+        connect(&buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        
+        if (dialog.exec() == QDialog::Accepted) {
+            // 获取选中的文件
+            QList<QListWidgetItem*> selectedItems = fileListView.selectedItems();
+            if (!selectedItems.isEmpty()) {
                 // 清空当前词库
                 words.clear();
                 cachedWords.clear(); // 同时清空缓存
                 
                 // 加载选定的词库文件
-                for (const QString &fileName : fileNames) {
-                    loadWordsFromFile(fileName);
+                for (const QListWidgetItem *item : selectedItems) {
+                    QString fileName = item->text();
+                    QString filePath = wordlistFiles.value(fileName);
+                    loadWordsFromFile(filePath);
                 }
             }
         }
@@ -963,14 +981,19 @@ void MainWindow::loadWordlistFiles()
     QDir dir(wordlistDirPath);
     QStringList filters;
     filters << "*.txt";
-    dir.setNameFilters(filters);
     
-    QFileInfoList fileList = dir.entryInfoList(QDir::Files, QDir::Name);
-    
-    for (const QFileInfo &fileInfo : fileList) {
-        QString filePath = fileInfo.absoluteFilePath();
-        if (isValidWordlistFile(filePath)) {
-            wordlistFiles[fileInfo.fileName()] = filePath;
+    // 递归遍历所有子目录
+    QDirIterator iterator(dir, QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        iterator.next();
+        QFileInfo fileInfo = iterator.fileInfo();
+        if (fileInfo.isFile() && fileInfo.fileName().endsWith(".txt", Qt::CaseInsensitive)) {
+            QString filePath = fileInfo.absoluteFilePath();
+            if (isValidWordlistFile(filePath)) {
+                // 使用相对路径作为键，以便区分不同子目录中的同名文件
+                QString relativePath = dir.relativeFilePath(filePath);
+                wordlistFiles[relativePath] = filePath;
+            }
         }
     }
 }
@@ -992,10 +1015,10 @@ bool MainWindow::isValidWordlistFile(const QString &filePath)
         // 如果行不为空但包含非字母字符（除了空格和连字符），则可能是无效的词库文件
         if (!line.isEmpty()) {
             // 检查是否只包含字母、空格和连字符
-            QRegExp regex("^[a-zA-Z\\s\\-']+$");
-            if (!regex.exactMatch(line)) {
+            QRegularExpression regex("^[a-zA-Z\\s\\-']+$");
+            if (!regex.match(line).hasMatch()) {
                 // 允许包含一些标点符号，但不能是特殊格式
-                if (line.contains(QRegExp("[0-9{}\\[\\]<>]"))) {
+                if (line.contains(QRegularExpression("[0-9{}\\[\\]<>]"))) {
                     file.close();
                     return false;
                 }
@@ -1020,7 +1043,7 @@ void MainWindow::loadWordsFromFile(const QString &filename)
         if (!line.isEmpty()) {
             words.push_back(line.toStdString());
             // 所有加载的单词都添加到缓存中（除了内置的wordlist.txt）
-            if (!filename.endsWith("wordlist.txt") || filename != "wordlist.txt") {
+            if (filename != "wordlist.txt") {
                 cachedWords.push_back(line.toStdString());
             }
         }

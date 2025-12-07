@@ -1,0 +1,1 @@
+-I"D:/c++/English-Listen/build/QtEnglishListen_autogen/include" -isystem D:/msys64/mingw64/include/qt6/QtCore -isystem D:/msys64/mingw64/include/qt6 -isystem "D:/msys64/mingw64/share/qt6/mkspecs/win32-g++" -isystem D:/msys64/mingw64/include/qt6/QtWidgets -isystem D:/msys64/mingw64/include/qt6/QtGui

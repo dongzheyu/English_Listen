@@ -1,0 +1,1 @@
+ D:/msys64/mingw64/lib/libQt6Widgets.dll.a D:/msys64/mingw64/lib/libQt6Gui.dll.a D:/msys64/mingw64/lib/libQt6Core.dll.a -lmpr -luserenv -lmingw32 D:/msys64/mingw64/lib/libQt6EntryPoint.a -lshell32 -ld3d11 -ldxgi -ldxguid -ld3d12 -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 

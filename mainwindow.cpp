@@ -62,6 +62,18 @@ MainWindow::MainWindow(QWidget *parent)
     if (settingsButton) connect(settingsButton, &QPushButton::clicked, this, &MainWindow::onShowSettings);
     if (startButton) connect(startButton, &QPushButton::clicked, this, &MainWindow::onStartTest);
     if (themeButton) connect(themeButton, &QPushButton::clicked, this, &MainWindow::onToggleTheme);
+    if (aboutButton) connect(aboutButton, &QPushButton::clicked, this, &MainWindow::onShowAbout);
+    
+    // 查找在setupUI中创建的指南按钮并连接信号
+    QPushButton *guideButton = nullptr;
+    // 遍历主窗口的所有子控件找到指南按钮
+    for (auto button : centralWidget->findChildren<QPushButton*>()) {
+        if (button->text() == "使用指南") {
+            guideButton = button;
+            break;
+        }
+    }
+    if (guideButton) connect(guideButton, &QPushButton::clicked, this, &MainWindow::onShowGuide);
     
     // 监听系统主题变化
     connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, &MainWindow::setupUI);
@@ -132,6 +144,7 @@ void MainWindow::setupUI()
         welcomeLabel = new QLabel(this);
         welcomeLabel->setAlignment(Qt::AlignCenter);
         QFont welcomeFont = welcomeLabel->font();
+        welcomeFont.setFamily("Microsoft YaHei"); // 使用微软雅黑字体
         welcomeFont.setPointSize(18);
         welcomeFont.setBold(true);
         welcomeLabel->setFont(welcomeFont);
@@ -139,7 +152,9 @@ void MainWindow::setupUI()
         
         // 创建按钮样式表
         QString buttonStyle = "QPushButton { "
-                             "padding: 8px 16px; "
+                             "font-family: 'Microsoft YaHei'; "
+                             "font-size: 9pt; "
+                             "padding: 6px 14px; "  // 缩小2px
                              "margin: 4px; "
                              "border: 1px solid #cccccc; "
                              "border-radius: 4px; "
@@ -162,12 +177,16 @@ void MainWindow::setupUI()
         settingsButton = new QPushButton("设置", this);
         startButton = new QPushButton("开始听写测试", this);
         themeButton = new QPushButton("切换主题", this);
+        aboutButton = new QPushButton("关于", this);
+        QPushButton *guideButton = new QPushButton("使用指南", this);
         
         // 设置按钮样式
         viewWordsButton->setStyleSheet(buttonStyle);
         settingsButton->setStyleSheet(buttonStyle);
         startButton->setStyleSheet(buttonStyle);
         themeButton->setStyleSheet(buttonStyle);
+        aboutButton->setStyleSheet(buttonStyle);
+        guideButton->setStyleSheet(buttonStyle);
         
         // 设置按钮尺寸策略以支持缩放
         QSize minButtonSize(100, 30);
@@ -175,16 +194,22 @@ void MainWindow::setupUI()
         settingsButton->setMinimumSize(minButtonSize);
         startButton->setMinimumSize(minButtonSize);
         themeButton->setMinimumSize(minButtonSize);
+        aboutButton->setMinimumSize(minButtonSize);
+        guideButton->setMinimumSize(minButtonSize);
         
         viewWordsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         settingsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         startButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         themeButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        aboutButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        guideButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         
         buttonLayout->addWidget(viewWordsButton);
         buttonLayout->addWidget(settingsButton);
         buttonLayout->addWidget(startButton);
         buttonLayout->addWidget(themeButton);
+        buttonLayout->addWidget(aboutButton);
+        buttonLayout->addWidget(guideButton);
         
         homeLayout->addWidget(welcomeLabel);
         homeLayout->addLayout(buttonLayout);
@@ -198,6 +223,7 @@ void MainWindow::setupUI()
         
         QLabel *wordsTitle = new QLabel("单词列表", wordsWidget);
         QFont titleFont = wordsTitle->font();
+        titleFont.setFamily("Microsoft YaHei"); // 使用微软雅黑字体
         titleFont.setPointSize(16);
         titleFont.setBold(true);
         wordsTitle->setFont(titleFont);
@@ -261,6 +287,7 @@ void MainWindow::setupUI()
         countdownLabel = new QLabel("5", testWidget);
         countdownLabel->setAlignment(Qt::AlignCenter);
         QFont font = countdownLabel->font();
+        font.setFamily("Microsoft YaHei"); // 使用微软雅黑字体
         font.setPointSize(48);
         font.setBold(true);
         countdownLabel->setFont(font);
@@ -344,6 +371,7 @@ void MainWindow::setupUI()
         
         QLabel *answersTitle = new QLabel("听写答案", answersWidget);
         titleFont = answersTitle->font();
+        titleFont.setFamily("Microsoft YaHei"); // 使用微软雅黑字体
         titleFont.setPointSize(16);
         titleFont.setBold(true);
         answersTitle->setFont(titleFont);
@@ -426,7 +454,9 @@ void MainWindow::toggleTheme()
                               "} ";
                               
     QString buttonStyleDark = "QPushButton { "
-                             "padding: 8px 16px; "
+                             "font-family: 'Microsoft YaHei'; "
+                             "font-size: 9pt; "
+                             "padding: 6px 14px; "  // 缩小2px
                              "margin: 4px; "
                              "border: 1px solid #555555; "
                              "border-radius: 4px; "
@@ -440,7 +470,7 @@ void MainWindow::toggleTheme()
                              "QPushButton:pressed { "
                              "background-color: #606060; "
                              "border: 1px solid #cccccc; "
-                             "} ";
+                             "}";
 
     if (isDarkTheme) {
         // 应用深色主题
@@ -483,6 +513,20 @@ void MainWindow::toggleTheme()
         if (nextButton) nextButton->setStyleSheet(buttonStyleDark);
         if (pauseResumeButton) pauseResumeButton->setStyleSheet(buttonStyleDark);
         if (backToMainButton) backToMainButton->setStyleSheet(buttonStyleDark);
+        if (aboutButton) aboutButton->setStyleSheet(buttonStyleDark);
+        if (addWordButton) addWordButton->setStyleSheet(buttonStyleDark);
+        if (removeWordButton) removeWordButton->setStyleSheet(buttonStyleDark);
+        if (clearWordsButton) clearWordsButton->setStyleSheet(buttonStyleDark);
+        if (loadWordsButton) loadWordsButton->setStyleSheet(buttonStyleDark);
+        if (saveWordsButton) saveWordsButton->setStyleSheet(buttonStyleDark);
+        if (backToHomeButton) backToHomeButton->setStyleSheet(buttonStyleDark);
+        
+        // 查找并设置主页的指南按钮样式
+        for (auto button : centralWidget->findChildren<QPushButton*>()) {
+            if (button->text() == "使用指南") {
+                button->setStyleSheet(buttonStyleDark);
+            }
+        }
         
         // 查找并设置测试界面的退出按钮样式
         if (testWidget) {
@@ -516,6 +560,20 @@ void MainWindow::toggleTheme()
         if (nextButton) nextButton->setStyleSheet(buttonStyleLight);
         if (pauseResumeButton) pauseResumeButton->setStyleSheet(buttonStyleLight);
         if (backToMainButton) backToMainButton->setStyleSheet(buttonStyleLight);
+        if (aboutButton) aboutButton->setStyleSheet(buttonStyleLight);
+        if (addWordButton) addWordButton->setStyleSheet(buttonStyleLight);
+        if (removeWordButton) removeWordButton->setStyleSheet(buttonStyleLight);
+        if (clearWordsButton) clearWordsButton->setStyleSheet(buttonStyleLight);
+        if (loadWordsButton) loadWordsButton->setStyleSheet(buttonStyleLight);
+        if (saveWordsButton) saveWordsButton->setStyleSheet(buttonStyleLight);
+        if (backToHomeButton) backToHomeButton->setStyleSheet(buttonStyleLight);
+        
+        // 查找并设置主页的指南按钮样式
+        for (auto button : centralWidget->findChildren<QPushButton*>()) {
+            if (button->text() == "使用指南") {
+                button->setStyleSheet(buttonStyleLight);
+            }
+        }
         
         // 查找并设置测试界面的退出按钮样式
         if (testWidget) {
@@ -676,6 +734,120 @@ void MainWindow::onShowSettings()
     });
     
     menu->popup(QCursor::pos());
+}
+
+void MainWindow::onShowAbout()
+{
+    QMessageBox aboutBox;
+    aboutBox.setWindowTitle("关于 English Listen");
+    aboutBox.setTextFormat(Qt::RichText);
+    
+    // 设置字体为微软雅黑
+    QFont aboutFont;
+    aboutFont.setFamily("Microsoft YaHei");
+    aboutBox.setFont(aboutFont);
+    
+    aboutBox.setText(
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen v1.4</h2>"
+        "<p style='font-family: Microsoft YaHei;'>一个帮助学习英语的听写练习工具</p>"
+        "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，使用 Windows SAPI 进行文本转语音。</p>"
+        "<h3 style='font-family: Microsoft YaHei;'>功能特点：</h3>"
+        "<ul style='font-family: Microsoft YaHei;'>"
+        "<li>支持自定义词库</li>"
+        "<li>可调节朗读时间间隔</li>"
+        "<li>支持深色/浅色主题切换</li>"
+        "<li>提供测试历史记录查看</li>"
+        "<li>界面字体统一为微软雅黑</li>"
+        "<li>按钮尺寸优化</li>"
+        "<li>新增使用指南功能</li>"
+        "</ul>"
+        "<p style='font-family: Microsoft YaHei;'>版权 © 2025 JetCPP。本软件使用 MIT 许可证发布。</p>"
+        "<p style='font-family: Microsoft YaHei;'>GitHub 仓库地址：<a href='https://github.com/dongzheyu/English_Listen'>https://github.com/dongzheyu/English_Listen</a></p>"
+        "<p style='font-family: Microsoft YaHei;'>Gitee 仓库地址：<a href='https://gitee.com/jetcpp/english_-listen'>https://gitee.com/jetcpp/english_-listen</a></p>"
+    );
+    
+    aboutBox.exec();
+}
+
+void MainWindow::onShowGuide()
+{
+    QDialog guideDialog(this);
+    guideDialog.setWindowTitle("使用指南");
+    guideDialog.resize(600, 500);
+    
+    QVBoxLayout *layout = new QVBoxLayout(&guideDialog);
+    
+    QTextEdit *guideText = new QTextEdit(&guideDialog);
+    guideText->setReadOnly(true);
+    
+    // 设置微软雅黑字体
+    QFont guideFont;
+    guideFont.setFamily("Microsoft YaHei");
+    guideFont.setPointSize(10);
+    guideText->setFont(guideFont);
+    
+    QString guideContent = 
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen 使用指南</h2>"
+        "<h3 style='font-family: Microsoft YaHei;'>1. 程序简介</h3>"
+        "<p style='font-family: Microsoft YaHei;'>English Listen 是一个基于 Qt6 框架开发的英语听写练习工具，使用 Windows SAPI 进行文本转语音。</p>"
+        
+        "<h3 style='font-family: Microsoft YaHei;'>2. 主要功能</h3>"
+        "<ul style='font-family: Microsoft YaHei;'>"
+        "<li><strong>词库管理</strong>：查看、添加、删除和保存单词列表</li>"
+        "<li><strong>听写测试</strong>：自动朗读单词，支持调节朗读时间间隔</li>"
+        "<li><strong>主题切换</strong>：支持浅色和深色主题，适配 Windows 系统主题</li>"
+        "<li><strong>词库文件</strong>：支持从文件导入和导出词库</li>"
+        "</ul>"
+        
+        "<h3 style='font-family: Microsoft YaHei;'>3. 使用步骤</h3>"
+        "<ol style='font-family: Microsoft YaHei;'>"
+        "<li><strong>添加单词</strong>：点击'查看单词'按钮进入词库管理界面，可以通过以下方式添加单词：<br>"
+        "  - 在输入框输入单词后点击'添加单词'<br>"
+        "  - 点击'从文件加载'选择词库文件<br>"
+        "  - 直接在文本框中输入多个单词（每行一个）</li>"
+        
+        "<li><strong>开始测试</strong>：返回主界面后点击'开始听写测试'按钮</li>"
+        
+        "<li><strong>测试控制</strong>：在测试过程中可以：<br>"
+        "  - 点击'再读一遍'重新朗读当前单词<br>"
+        "  - 点击'上一个'返回前一个单词<br>"
+        "  - 点击'下一个'跳到下一个单词<br>"
+        "  - 点击'暂停'/'继续'控制测试进程</li>"
+        
+        "<li><strong>查看答案</strong>：测试结束后可选择'显示答案'查看全部单词列表</li>"
+        "</ol>"
+        
+        "<h3 style='font-family: Microsoft YaHei;'>4. 设置选项</h3>"
+        "<p style='font-family: Microsoft YaHei;'>点击'设置'按钮可以：</p>"
+        "<ul style='font-family: Microsoft YaHei;'>"
+        "<li>切换深色/浅色主题</li>"
+        "<li>设置朗读时间间隔（1-60秒）</li>"
+        "</ul>"
+        
+        "<h3 style='font-family: Microsoft YaHei;'>5. 词库文件</h3>"
+        "<p style='font-family: Microsoft YaHei;'>程序会自动在'wordlist'文件夹中查找词库文件，支持递归遍历子文件夹。</p>"
+        
+        "<h3 style='font-family: Microsoft YaHei;'>6. 注意事项</h3>"
+        "<ul style='font-family: Microsoft YaHei;'>"
+        "<li>确保系统启用了TTS(text-to-speech)功能</li>"
+        "<li>程序退出时会询问是否保存当前词库</li>"
+        "<li>测试过程中点击'退出测试'会有确认对话框</li>"
+        "</ul>";
+    
+    guideText->setHtml(guideContent);
+    layout->addWidget(guideText);
+    
+    QPushButton *closeButton = new QPushButton("关闭", &guideDialog);
+    // 设置关闭按钮也使用微软雅黑字体
+    QFont buttonFont;
+    buttonFont.setFamily("Microsoft YaHei");
+    buttonFont.setPointSize(9);
+    closeButton->setFont(buttonFont);
+    layout->addWidget(closeButton);
+    
+    connect(closeButton, &QPushButton::clicked, &guideDialog, &QDialog::accept);
+    
+    guideDialog.exec();
 }
 
 void MainWindow::onAddWord()
@@ -1297,6 +1469,8 @@ void MainWindow::adjustButtons()
         // 这些按钮在 QHBoxLayout 中，Qt 会自动处理布局
     }
 }
+
+
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {

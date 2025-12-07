@@ -77,6 +77,8 @@ private slots:
     void onViewWords();        // 新增：查看单词
     void onAddWord();          // 移动：添加单词到单词页面
     void onShowSettings();     // 新增：显示设置菜单
+    void onShowAbout();        // 新增：显示关于界面
+    void onShowGuide();        // 新增：显示指南界面
     void onUpdateWelcomeAnimation(); // 新增：更新欢迎语动画
 
 private:
@@ -92,6 +94,7 @@ private:
     QPushButton *settingsButton;    // 恢复：设置按钮
     QPushButton *startButton;
     QPushButton *themeButton;       // 主题切换按钮
+    QPushButton *aboutButton;       // 关于按钮
     
     // 动画相关
     QTimer *welcomeTimer;

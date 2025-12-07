@@ -31,6 +31,15 @@ if(WIN32)
     # 启用Windows资源编译
     enable_language(RC)
     
+    # 构建后自动部署Qt依赖库和C++运行时库
+    add_custom_command(
+        TARGET QtEnglishListen POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "$<TARGET_FILE_DIR:QtEnglishListen>/windeployqt"
+        COMMAND set PATH=%PATH%$<SEMICOLON>${Qt6_DIR}/../../../bin
+        COMMAND Qt6::windeployqt --dir "$<TARGET_FILE_DIR:QtEnglishListen>/windeployqt" --compiler-runtime "$<TARGET_FILE:QtEnglishListen>"
+        COMMENT "Deploying Qt libraries and C++ runtime with windeployqt"
+    )
+    
     # 构建后自动签名
     add_custom_command(
         TARGET QtEnglishListen POST_BUILD

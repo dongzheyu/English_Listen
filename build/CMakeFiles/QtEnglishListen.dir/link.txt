@@ -1,3 +1,0 @@
-D:\msys64\mingw64\bin\cmake.exe -E rm -f CMakeFiles\QtEnglishListen.dir/objects.a
-D:\msys64\mingw64\bin\ar.exe qc CMakeFiles\QtEnglishListen.dir/objects.a @CMakeFiles\QtEnglishListen.dir\objects1.rsp
-D:\msys64\mingw64\bin\c++.exe -mwindows -Wl,--whole-archive CMakeFiles\QtEnglishListen.dir/objects.a -Wl,--no-whole-archive -o QtEnglishListen.exe -Wl,--out-implib,libQtEnglishListen.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\QtEnglishListen.dir\linkLibs.rsp

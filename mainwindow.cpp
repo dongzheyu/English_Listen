@@ -11,6 +11,7 @@ MainWindow::MainWindow(QWidget *parent)
     , readInterval(5)  // 初始化朗读时间间隔为5秒
     , isValidWordlistDir(false) // 初始化词库目录有效性为false
     , welcomeAnimationStep(0)
+    , speechEngine(0) // 初始化语音引擎为SAPI
     , centralWidget(nullptr)
     , mainLayout(nullptr)
     , topLayout(nullptr)
@@ -55,6 +56,12 @@ MainWindow::MainWindow(QWidget *parent)
     // 加载配置
     loadSettings();
     
+    // 创建临时词库文件
+    createTempWordlist();
+    
+    // 加载临时词库内容（如果存在）
+    loadFromTempWordlist();
+    
     setupUI();
     
     // 确保所有控件都已创建后再连接信号和槽
@@ -85,6 +92,11 @@ MainWindow::MainWindow(QWidget *parent)
     // 欢迎语动画定时器
     welcomeTimer = new QTimer(this);
     connect(welcomeTimer, &QTimer::timeout, this, &MainWindow::onUpdateWelcomeAnimation);
+    
+    // 连接单词编辑框的文本变化信号到保存临时文件的槽
+    if (wordsTextEdit) {
+        connect(wordsTextEdit, &QTextEdit::textChanged, this, &MainWindow::saveToTempWordlist);
+    }
     
     // 不再自动加载默认词库
     // QString defaultWordlist = "wordlist.txt";
@@ -722,12 +734,29 @@ void MainWindow::onShowSettings()
     connect(intervalAction, &QAction::triggered, this, [=]() {
         bool ok;
         int interval = QInputDialog::getInt(this, "朗读时间间隔设置", 
-                                          "请输入朗读时间间隔(秒):", 
-                                          readInterval, 1, 60, 1, &ok);
+                                          "请输入朗读时间间隔(秒):", readInterval, 1, 60, 1, &ok);
         if (ok) {
             readInterval = interval;
             QMessageBox::information(this, "设置成功", 
                                    QString("朗读时间间隔已设置为 %1 秒").arg(readInterval));
+            // 保存设置
+            saveSettings();
+        }
+    });
+    
+    QAction *engineAction = menu->addAction("朗读引擎设置");
+    connect(engineAction, &QAction::triggered, this, [=]() {
+        bool ok;
+        QStringList items;
+        items << "SAPI (Windows内置)" << "Flite (第三方引擎)";
+        QString currentItem = (speechEngine == 0) ? "SAPI (Windows内置)" : "Flite (第三方引擎)";
+        QString item = QInputDialog::getItem(this, "朗读引擎设置", 
+                                           "请选择朗读引擎:", items, 
+                                           items.indexOf(currentItem), false, &ok);
+        if (ok && !item.isEmpty()) {
+            speechEngine = (item == "SAPI (Windows内置)") ? 0 : 1;
+            QMessageBox::information(this, "设置成功", 
+                                   QString("朗读引擎已设置为: %1").arg(item));
             // 保存设置
             saveSettings();
         }
@@ -748,9 +777,9 @@ void MainWindow::onShowAbout()
     aboutBox.setFont(aboutFont);
     
     aboutBox.setText(
-        "<h2 style='font-family: Microsoft YaHei;'>English Listen v1.4</h2>"
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen v1.5</h2>"
         "<p style='font-family: Microsoft YaHei;'>一个帮助学习英语的听写练习工具</p>"
-        "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，使用 Windows SAPI 进行文本转语音。</p>"
+        "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，支持 Windows SAPI 和 Flite 语音引擎。</p>"
         "<h3 style='font-family: Microsoft YaHei;'>功能特点：</h3>"
         "<ul style='font-family: Microsoft YaHei;'>"
         "<li>支持自定义词库</li>"
@@ -760,6 +789,8 @@ void MainWindow::onShowAbout()
         "<li>界面字体统一为微软雅黑</li>"
         "<li>按钮尺寸优化</li>"
         "<li>新增使用指南功能</li>"
+        "<li>支持临时词库自动保存和另存为功能</li>"
+        "<li>支持SAPI和Flite两种朗读引擎</li>"
         "</ul>"
         "<p style='font-family: Microsoft YaHei;'>版权 © 2025 JetCPP。本软件使用 MIT 许可证发布。</p>"
         "<p style='font-family: Microsoft YaHei;'>GitHub 仓库地址：<a href='https://github.com/dongzheyu/English_Listen'>https://github.com/dongzheyu/English_Listen</a></p>"
@@ -789,7 +820,7 @@ void MainWindow::onShowGuide()
     QString guideContent = 
         "<h2 style='font-family: Microsoft YaHei;'>English Listen 使用指南</h2>"
         "<h3 style='font-family: Microsoft YaHei;'>1. 程序简介</h3>"
-        "<p style='font-family: Microsoft YaHei;'>English Listen 是一个基于 Qt6 框架开发的英语听写练习工具，使用 Windows SAPI 进行文本转语音。</p>"
+        "<p style='font-family: Microsoft YaHei;'>English Listen 是一个基于 Qt6 框架开发的英语听写练习工具，支持 Windows SAPI 和 Flite 两种语音引擎进行文本转语音。</p>"
         
         "<h3 style='font-family: Microsoft YaHei;'>2. 主要功能</h3>"
         "<ul style='font-family: Microsoft YaHei;'>"
@@ -797,6 +828,8 @@ void MainWindow::onShowGuide()
         "<li><strong>听写测试</strong>：自动朗读单词，支持调节朗读时间间隔</li>"
         "<li><strong>主题切换</strong>：支持浅色和深色主题，适配 Windows 系统主题</li>"
         "<li><strong>词库文件</strong>：支持从文件导入和导出词库</li>"
+        "<li><strong>临时词库</strong>：编辑词库时自动保存到临时文件，退出时可选择保存</li>"
+        "<li><strong>语音引擎</strong>：支持SAPI和Flite两种朗读引擎</li>"
         "</ul>"
         
         "<h3 style='font-family: Microsoft YaHei;'>3. 使用步骤</h3>"
@@ -822,14 +855,22 @@ void MainWindow::onShowGuide()
         "<ul style='font-family: Microsoft YaHei;'>"
         "<li>切换深色/浅色主题</li>"
         "<li>设置朗读时间间隔（1-60秒）</li>"
+        "<li>选择朗读引擎（SAPI或Flite）</li>"
         "</ul>"
         
         "<h3 style='font-family: Microsoft YaHei;'>5. 词库文件</h3>"
-        "<p style='font-family: Microsoft YaHei;'>程序会自动在'wordlist'文件夹中查找词库文件，支持递归遍历子文件夹。</p>"
+        "<p style='font-family: Microsoft YaHei;'>程序会自动在'wordlist'文件夹中查找词库文件，支持递归遍历子文件夹。<br>"
+        "编辑词库时，所有更改会自动保存到临时文件(appdata/temp)，退出时可选择是否保存到指定位置。</p>"
         
-        "<h3 style='font-family: Microsoft YaHei;'>6. 注意事项</h3>"
+        "<h3 style='font-family: Microsoft YaHei;'>6. 语音引擎</h3>"
+        "<p style='font-family: Microsoft YaHei;'>程序支持两种语音引擎：<br>"
+        "- <strong>SAPI</strong>：Windows内置的语音引擎，无需额外安装<br>"
+        "- <strong>Flite</strong>：第三方轻量级语音引擎，独立程序已随软件部署</p>"
+        
+        "<h3 style='font-family: Microsoft YaHei;'>7. 注意事项</h3>"
         "<ul style='font-family: Microsoft YaHei;'>"
         "<li>确保系统启用了TTS(text-to-speech)功能</li>"
+        "<li>Flite引擎文件已随软件部署，无需额外安装</li>"
         "<li>程序退出时会询问是否保存当前词库</li>"
         "<li>测试过程中点击'退出测试'会有确认对话框</li>"
         "</ul>";
@@ -919,7 +960,26 @@ void MainWindow::onAddWordsFromFile()
 
 void MainWindow::onSaveWordsToFile()
 {
-    QString fileName = QFileDialog::getSaveFileName(this, "保存词库文件", "wordlist.txt", "Text Files (*.txt)");
+    // 在保存前，确保words向量包含当前编辑框中的内容
+    if (wordsTextEdit) {
+        // 清空当前词库
+        words.clear();
+        cachedWords.clear();
+        
+        // 从编辑框获取当前内容并更新words向量
+        QString text = wordsTextEdit->toPlainText();
+        QStringList lines = text.split('\n', Qt::SkipEmptyParts);
+        for (const QString& line : lines) {
+            QString trimmedLine = line.trimmed();
+            if (!trimmedLine.isEmpty()) {
+                words.push_back(trimmedLine.toStdString());
+                cachedWords.push_back(trimmedLine.toStdString());
+            }
+        }
+    }
+    
+    // 直接弹出保存对话框，实现另存为功能
+    QString fileName = QFileDialog::getSaveFileName(this, "词库另存为", "", "Text Files (*.txt)");
     if (!fileName.isEmpty()) {
         saveWordsToFile(fileName);
         QMessageBox::information(this, "提示", "词库保存成功");
@@ -1233,11 +1293,50 @@ void MainWindow::loadWordsFromFile(const QString &filename)
     }
 }
 
+void MainWindow::loadFromTempWordlist()
+{
+    QFile file(tempWordlistFile);
+    if (!file.exists()) {
+        // 如果临时文件不存在，不做任何操作
+        return;
+    }
+    
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return;
+    }
+    
+    QTextStream in(&file);
+    QString content = in.readAll();
+    file.close();
+    
+    // 清空当前词库
+    words.clear();
+    cachedWords.clear();
+    
+    // 解析内容并添加到词库
+    QStringList lines = content.split('\n', Qt::SkipEmptyParts);
+    for (const QString& line : lines) {
+        QString trimmedLine = line.trimmed();
+        if (!trimmedLine.isEmpty()) {
+            words.push_back(trimmedLine.toStdString());
+            cachedWords.push_back(trimmedLine.toStdString());
+        }
+    }
+    
+    // 更新单词列表显示
+    if (wordsTextEdit) {
+        wordsTextEdit->setPlainText(content);
+    }
+}
+
 void MainWindow::saveWordsToFile(const QString &filename)
 {
     QFile file(filename);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, "错误", "无法保存文件");
+        QMessageBox::warning(this, "保存失败", 
+                           QString("无法保存文件到：%1\n错误信息：%2")
+                           .arg(filename)
+                           .arg(file.errorString()));
         return;
     }
     
@@ -1247,6 +1346,9 @@ void MainWindow::saveWordsToFile(const QString &filename)
     }
     
     file.close();
+    
+    // 确认保存成功
+    QMessageBox::information(this, "保存成功", QString("词库已成功保存至：%1").arg(filename));
 }
 
 void MainWindow::loadSettings()
@@ -1259,9 +1361,17 @@ void MainWindow::loadSettings()
     // 加载朗读时间间隔设置
     readInterval = settings.value("test/readInterval", 5).toInt();
     
+    // 加载语音引擎设置
+    speechEngine = settings.value("speech/engine", 0).toInt(); // 默认为SAPI (0)
+    
     // 确保时间间隔在合理范围内
     if (readInterval < 1 || readInterval > 60) {
         readInterval = 5;
+    }
+    
+    // 确保语音引擎值有效
+    if (speechEngine < 0 || speechEngine > 1) {
+        speechEngine = 0; // 默认使用SAPI
     }
 }
 
@@ -1274,6 +1384,9 @@ void MainWindow::saveSettings()
     
     // 保存朗读时间间隔设置
     settings.setValue("test/readInterval", readInterval);
+    
+    // 保存语音引擎设置
+    settings.setValue("speech/engine", speechEngine);
     
     // 确保数据写入磁盘
     settings.sync();
@@ -1359,6 +1472,42 @@ void MainWindow::onUpdateWelcomeAnimation()
     welcomeLabel->move(width()/2 - welcomeLabel->width()/2, 50 + offset);
 }
 
+void MainWindow::createTempWordlist()
+{
+    // 创建临时词库文件路径，使用AppData下的临时目录
+    QString tempDir = QDir::tempPath();
+    QString appTempDir = tempDir + "/EnglishListen";
+    
+    // 创建应用程序的临时目录
+    QDir dir;
+    if (!dir.exists(appTempDir)) {
+        dir.mkpath(appTempDir);
+    }
+    
+    // 设置临时词库文件路径
+    tempWordlistFile = appTempDir + "/temp_wordlist.txt";
+}
+
+void MainWindow::saveToTempWordlist()
+{
+    // 如果文本编辑框不存在，直接返回
+    if (!wordsTextEdit) return;
+    
+    // 如果临时文件路径为空，不执行保存
+    if (tempWordlistFile.isEmpty()) return;
+    
+    QFile file(tempWordlistFile);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        // 如果无法创建临时文件，记录日志但不中断用户操作
+        qDebug() << "Could not create temporary file:" << tempWordlistFile << "Error:" << file.errorString();
+        return;
+    }
+    
+    QTextStream out(&file);
+    out << wordsTextEdit->toPlainText();
+    file.close();
+}
+
 void MainWindow::speakWord(const std::string &word)
 {
     // 清理输入文本，只保留安全的字符
@@ -1382,33 +1531,128 @@ void MainWindow::speakWord(const std::string &word)
         cleanedWord = "empty";
     }
     
-    // 构建VBScript代码
-    QString vbsCode = "Dim voice\n";
-    vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
-    vbsCode += "voice.Speak \"" + cleanedWord + "\"\n";
-    
-    // 创建临时VBS文件
-    QString tempPath = QDir::tempPath();
-    QString vbsFile = tempPath + "\\temp_speak.vbs";
-    
-    QFile file(vbsFile);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QTextStream out(&file);
-        out << vbsCode;
-        file.close();
+    if (speechEngine == 0) { // SAPI
+        // 构建VBScript代码
+        QString vbsCode = "Dim voice\n";
+        vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
+        vbsCode += "voice.Speak \"" + cleanedWord + "\"\n";
         
-        // 执行VBS脚本
-        if (QFile::exists(vbsFile)) {
-            QString program = "wscript.exe";
-            QStringList arguments;
-            arguments << "//nologo" << vbsFile;
+        // 创建临时VBS文件
+        QString tempPath = QDir::tempPath();
+        QString vbsFile = tempPath + "/temp_speak.vbs";
+        
+        QFile file(vbsFile);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream out(&file);
+            out << vbsCode;
+            file.close();
             
-            QProcess process;
-            process.start(program, arguments);
-            process.waitForFinished(5000); // 最多等待5秒
+            // 执行VBS脚本
+            if (QFile::exists(vbsFile)) {
+                QString program = "wscript.exe";
+                QStringList arguments;
+                arguments << "//nologo" << vbsFile;
+                
+                QProcess process;
+                process.start(program, arguments);
+                process.waitForFinished(5000); // 最多等待5秒
+                
+                // 删除临时文件
+                QFile::remove(vbsFile);
+            }
+        }
+    } else if (speechEngine == 1) { // Flite
+        // 尝试使用runtime目录下的flite.exe命令行工具
+        QProcess fliteProcess;
+        
+        // 生成临时WAV文件
+        QString tempWavFile = QDir::tempPath() + "/temp_flite_speech.wav";
+        
+        // 准备参数：将文本转换为WAV文件
+        QStringList args;
+        args << "-t" << cleanedWord << "-o" << tempWavFile << "-voice" << "cmu_us_kal";
+        
+        // 获取应用程序当前目录
+        QString appDir = QCoreApplication::applicationDirPath();
+        QString flitePath = appDir + "/runtime/flite.exe";
+        
+        // 检查runtime目录下的flite.exe是否存在
+        if (!QFile::exists(flitePath)) {
+            // 如果runtime目录下不存在，尝试直接调用flite.exe（系统路径中）
+            fliteProcess.start("flite.exe", args);
+        } else {
+            // 使用runtime目录下的flite.exe
+            fliteProcess.start(flitePath, args);
+        }
+        
+        if (fliteProcess.waitForFinished(5000)) { // 等待最多5秒
+            // 检查是否成功生成了音频文件
+            QFile audioFile(tempWavFile);
+            if (audioFile.exists()) {
+                // 使用QProcess播放音频文件
+                QProcess playProcess;
+                QStringList playArgs;
+                playArgs << "/play" << tempWavFile << "/close";
+                playProcess.start("sndrec32.exe", playArgs);
+                playProcess.waitForFinished(5000);
+                
+                // 删除临时音频文件
+                QFile::remove(tempWavFile);
+            } else {
+                qDebug() << "Flite failed to generate audio file for: " << cleanedWord;
+                // 如果flite命令失败，回退到SAPI
+                QString vbsCode = "Dim voice\n";
+                vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
+                vbsCode += "voice.Speak \"" + cleanedWord + "\"\n";
+                
+                QString tempPath = QDir::tempPath();
+                QString vbsFile = tempPath + "/temp_speak.vbs";
+                
+                QFile file(vbsFile);
+                if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                    QTextStream out(&file);
+                    out << vbsCode;
+                    file.close();
+                    
+                    if (QFile::exists(vbsFile)) {
+                        QProcess process;
+                        QStringList arguments;
+                        arguments << "//nologo" << vbsFile;
+                        
+                        process.start("wscript.exe", arguments);
+                        process.waitForFinished(5000);
+                        
+                        QFile::remove(vbsFile);
+                    }
+                }
+            }
+        } else {
+            qDebug() << "Flite process failed to start or timed out for: " << cleanedWord;
+            // 如果flite启动失败，回退到SAPI
+            QString vbsCode = "Dim voice\n";
+            vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
+            vbsCode += "voice.Speak \"" + cleanedWord + "\"\n";
             
-            // 删除临时文件
-            QFile::remove(vbsFile);
+            QString tempPath = QDir::tempPath();
+            QString vbsFile = tempPath + "/temp_speak.vbs";
+            
+            QFile file(vbsFile);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream out(&file);
+                out << vbsCode;
+                file.close();
+                
+                if (QFile::exists(vbsFile)) {
+                    QProcess process;
+                    QStringList arguments;
+                    arguments << "//nologo" << vbsFile;
+                    
+                    process.start("wscript.exe", arguments);
+                    process.waitForFinished(5000);
+                    
+                    QFile::remove(vbsFile);
+                }
+            }
         }
     }
 }
@@ -1477,28 +1721,32 @@ void MainWindow::closeEvent(QCloseEvent *event)
     // 保存设置
     saveSettings();
     
-    // 检查是否有缓存的单词
-    if (!cachedWords.empty()) {
-        QMessageBox msgBox;
-        msgBox.setWindowTitle("保存词库");
-        msgBox.setText("是否保存本次听写的词库？");
-        QPushButton *saveButton = msgBox.addButton("保存", QMessageBox::ActionRole);
-        QPushButton *discardButton = msgBox.addButton("丢弃", QMessageBox::ActionRole);
-        msgBox.setDefaultButton(discardButton);
-        
-        msgBox.exec();
-        
-        if (msgBox.clickedButton() == saveButton) {
-            // 生成带日期的文件名
-            QString currentDate = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
-            QString fileName = QString("wordlist_%1.txt").arg(currentDate);
-            QString filePath = wordlistDirPath + "/" + fileName;
+    // 检查临时词库文件是否存在且内容不为空
+    QFile tempFile(tempWordlistFile);
+    if (tempFile.exists()) {
+        if (tempFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QString tempContent = tempFile.readAll();
+            tempFile.close();
             
-            // 保存词库
-            saveWordsToFile(filePath);
-            
-            QMessageBox::information(this, "保存成功", 
-                                   QString("词库已保存至: %1").arg(filePath));
+            if (!tempContent.trimmed().isEmpty()) {
+                QMessageBox msgBox;
+                msgBox.setWindowTitle("保存词库");
+                msgBox.setText("是否保存当前编辑的词库？");
+                QPushButton *saveButton = msgBox.addButton("保存", QMessageBox::ActionRole);
+                QPushButton *discardButton = msgBox.addButton("不保存", QMessageBox::ActionRole);
+                msgBox.setDefaultButton(discardButton);
+                
+                msgBox.exec();
+                
+                if (msgBox.clickedButton() == saveButton) {
+                    // 弹出文件保存对话框，让用户选择保存位置和文件名
+                    QString fileName = QFileDialog::getSaveFileName(this, "保存词库", "", "Text Files (*.txt)");
+                    if (!fileName.isEmpty()) {
+                        // 保存词库
+                        saveWordsToFile(fileName);
+                    }
+                }
+            }
         }
     }
     

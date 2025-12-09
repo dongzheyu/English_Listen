@@ -45,6 +45,11 @@
 #include <vector>
 #include <string>
 
+// 注意：现在使用runtime目录下的flite.exe命令行工具，不再直接包含flite头文件
+// #ifdef FLITE_ENABLED
+// #include <flite.h>
+// #endif
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -140,6 +145,8 @@ private:
     bool isValidWordlistDir; // 词库目录是否有效
     QString wordlistDirPath; // 词库目录路径
     QMap<QString, QString> wordlistFiles; // 词库文件列表
+    QString tempWordlistFile; // 临时词库文件路径
+    int speechEngine; // 语音引擎选择 (0=SAPI, 1=Flite)
     
     void setupUI();
     void loadWordsFromFile(const QString &filename);
@@ -158,5 +165,8 @@ private:
     void loadSettings(); // 加载配置
     void saveSettings(); // 保存配置
     void loadWordlistFiles(); // 加载词库文件列表
+    void createTempWordlist(); // 创建临时词库文件
+    void saveToTempWordlist(); // 保存到临时词库文件
+    void loadFromTempWordlist(); // 从临时词库加载
 };
 #endif // MAINWINDOW_H

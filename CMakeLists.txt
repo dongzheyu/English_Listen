@@ -9,6 +9,10 @@ set(CMAKE_AUTOUIC ON)
 # 查找Qt6组件
 find_package(Qt6 COMPONENTS Core Widgets REQUIRED)
 
+# 查找Flite库
+find_library(FLITE_LIB flite HINTS "D:/msys64/mingw64/lib")
+find_path(FLITE_INCLUDE_DIR flite.h HINTS "D:/msys64/mingw64/include")
+
 # 添加Qt版本可执行文件
 add_executable(QtEnglishListen
     qt_main.cpp
@@ -17,14 +21,25 @@ add_executable(QtEnglishListen
     english_listen.rc
 )
 
-# 链接Qt6库
+# 链接Qt6库和Flite库
 target_link_libraries(QtEnglishListen 
     Qt6::Core 
     Qt6::Widgets
 )
 
+# 如果找到了Flite库，则链接它
+if(FLITE_LIB AND FLITE_INCLUDE_DIR)
+    target_link_libraries(QtEnglishListen ${FLITE_LIB})
+    target_include_directories(QtEnglishListen PRIVATE ${FLITE_INCLUDE_DIR})
+    # 添加预处理器定义，标记Flite已启用
+    target_compile_definitions(QtEnglishListen PRIVATE FLITE_ENABLED)
+endif()
+
 # Windows特定设置
 if(WIN32)
+    # 链接Windows多媒体库以支持Flite
+    target_link_libraries(QtEnglishListen winmm)
+    
     # 将Qt应用程序设置为Windows GUI应用程序，避免显示控制台窗口
     set_target_properties(QtEnglishListen PROPERTIES WIN32_EXECUTABLE ON)
     
@@ -39,6 +54,17 @@ if(WIN32)
         COMMAND Qt6::windeployqt --dir "$<TARGET_FILE_DIR:QtEnglishListen>/windeployqt" --compiler-runtime "$<TARGET_FILE:QtEnglishListen>"
         COMMENT "Deploying Qt libraries and C++ runtime with windeployqt"
     )
+    
+    # 构建后复制Flite运行时库（如果找到了Flite库）
+    if(FLITE_LIB)
+        get_filename_component(FLITE_LIB_NAME ${FLITE_LIB} NAME)
+        get_filename_component(FLITE_LIB_DIR ${FLITE_LIB} DIRECTORY)
+        add_custom_command(
+            TARGET QtEnglishListen POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FLITE_LIB_DIR}/${FLITE_LIB_NAME}" "$<TARGET_FILE_DIR:QtEnglishListen>/" || echo "Warning: Could not copy Flite library."
+            COMMENT "Copying Flite runtime library"
+        )
+    endif()
     
     # 构建后自动签名
     add_custom_command(

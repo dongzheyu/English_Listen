@@ -1,17 +1,8 @@
 #include "mainwindow.h"
-#include <QApplication>
-#include <QStyleHints>
+#include <QProgressDialog>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    , currentIndex(0)
-    , countdown(0)
-    , isDarkTheme(false)
-    , isPaused(false)  // 初始化暂停状态
-    , readInterval(5)  // 初始化朗读时间间隔为5秒
-    , isValidWordlistDir(false) // 初始化词库目录有效性为false
-    , welcomeAnimationStep(0)
-    , speechEngine(0) // 初始化语音引擎为SAPI
     , centralWidget(nullptr)
     , mainLayout(nullptr)
     , topLayout(nullptr)
@@ -22,7 +13,9 @@ MainWindow::MainWindow(QWidget *parent)
     , settingsButton(nullptr)
     , startButton(nullptr)
     , themeButton(nullptr)
+    , aboutButton(nullptr)
     , welcomeTimer(nullptr)
+    , welcomeAnimationStep(0)
     , wordsWidget(nullptr)
     , wordsLayout(nullptr)
     , wordsTextEdit(nullptr)
@@ -44,75 +37,31 @@ MainWindow::MainWindow(QWidget *parent)
     , answersLabel(nullptr)
     , backToMainButton(nullptr)
     , answersScrollArea(nullptr)
+    , networkManager(nullptr)
+    , downloadProgressDialog(nullptr)
+    , currentIndex(0)
     , timer(nullptr)
+    , countdown(5)
+    , isDarkTheme(false)
+    , isPaused(false)
+    , readInterval(5)
+    , isValidWordlistDir(false)
+    , wordlistDirPath("./wordlist")
+    , tempWordlistFile("")
+    , speechEngine(0)
 {
-    // 启用高DPI支持
-    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
-    
-    // 检查词库目录
-    checkWordlistDirectory();
-    
-    // 加载配置
-    loadSettings();
-    
-    // 创建临时词库文件
-    createTempWordlist();
-    
-    // 加载临时词库内容（如果存在）
-    loadFromTempWordlist();
+    // 初始化网络管理器
+    networkManager = new QNetworkAccessManager(this);
+    connect(networkManager, &QNetworkAccessManager::finished, 
+            this, &MainWindow::onDownloadFinished);
     
     setupUI();
-    
-    // 确保所有控件都已创建后再连接信号和槽
-    if (viewWordsButton) connect(viewWordsButton, &QPushButton::clicked, this, &MainWindow::onViewWords);
-    if (settingsButton) connect(settingsButton, &QPushButton::clicked, this, &MainWindow::onShowSettings);
-    if (startButton) connect(startButton, &QPushButton::clicked, this, &MainWindow::onStartTest);
-    if (themeButton) connect(themeButton, &QPushButton::clicked, this, &MainWindow::onToggleTheme);
-    if (aboutButton) connect(aboutButton, &QPushButton::clicked, this, &MainWindow::onShowAbout);
-    
-    // 查找在setupUI中创建的指南按钮并连接信号
-    QPushButton *guideButton = nullptr;
-    // 遍历主窗口的所有子控件找到指南按钮
-    for (auto button : centralWidget->findChildren<QPushButton*>()) {
-        if (button->text() == "使用指南") {
-            guideButton = button;
-            break;
-        }
-    }
-    if (guideButton) connect(guideButton, &QPushButton::clicked, this, &MainWindow::onShowGuide);
-    
-    // 监听系统主题变化
-    connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, &MainWindow::setupUI);
-    
-    // 定时器初始化
-    timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &MainWindow::onNextWord);
-    
-    // 欢迎语动画定时器
-    welcomeTimer = new QTimer(this);
-    connect(welcomeTimer, &QTimer::timeout, this, &MainWindow::onUpdateWelcomeAnimation);
-    
-    // 连接单词编辑框的文本变化信号到保存临时文件的槽
-    if (wordsTextEdit) {
-        connect(wordsTextEdit, &QTextEdit::textChanged, this, &MainWindow::saveToTempWordlist);
-    }
-    
-    // 不再自动加载默认词库
-    // QString defaultWordlist = "wordlist.txt";
-    // QFile defaultFile(defaultWordlist);
-    // if (defaultFile.exists()) {
-    //     loadWordsFromFile(defaultWordlist);
-    // }
-    
-    // 更新欢迎语
-    updateWelcomeMessage();
-    
-    // 开始欢迎语动画
+    checkWordlistDirectory();
+    loadWordlistFiles();
+    loadSettings();
+    createTempWordlist();
+    loadFromTempWordlist();
     startWelcomeAnimation();
-    
-    // 调整按钮大小
-    adjustButtons();
 }
 
 MainWindow::~MainWindow()
@@ -1579,6 +1528,26 @@ void MainWindow::speakWord(const std::string &word)
                 flitePath = "flite.exe";
             }
         }
+        
+        // 检查Flite可执行文件是否存在
+        if (!QFile::exists(flitePath)) {
+            // 如果Flite不存在，提示用户是否要下载
+            QMessageBox::StandardButton reply;
+            reply = QMessageBox::question(this, "Flite未找到", 
+                "Flite语音引擎未找到，是否要自动下载Flite语音引擎？\n\n"
+                "点击'是'将从网络下载Flite引擎，点击'否'将使用系统默认的SAPI引擎。",
+                QMessageBox::Yes | QMessageBox::No);
+            
+            if (reply == QMessageBox::Yes) {
+                // 下载Flite
+                downloadFlite();
+                // 使用SAPI作为临时回退方案
+                goto sapi_fallback;
+            } else {
+                // 使用SAPI作为回退方案
+                goto sapi_fallback;
+            }
+        }
 
         // 使用QProcess代替system函数，避免cmd窗口闪烁
         QProcess process;
@@ -1597,30 +1566,7 @@ void MainWindow::speakWord(const std::string &word)
                     QString("Flite引擎朗读失败，错误码: %1\n尝试使用SAPI引擎").arg(process.exitCode()));
                 
                 // 回退到SAPI
-                QString vbsCode = "Dim voice\n";
-                vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
-                vbsCode += "voice.Speak \"" + cleanedWord + "\"\n";
-                
-                QString tempPath = QDir::tempPath();
-                QString vbsFile = tempPath + "/temp_speak.vbs";
-                
-                QFile file(vbsFile);
-                if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                    QTextStream out(&file);
-                    out << vbsCode;
-                    file.close();
-                    
-                    if (QFile::exists(vbsFile)) {
-                        QString program = "wscript.exe";
-                        QStringList args;
-                        args << "//nologo" << vbsFile;
-                        
-                        QProcess sapiProcess;
-                        sapiProcess.start(program, args);
-                        sapiProcess.waitForFinished(5000);
-                        QFile::remove(vbsFile);
-                    }
-                }
+                goto sapi_fallback;
             }
         } else {
             // 如果Flite启动失败，尝试使用SAPI作为备选方案
@@ -1628,29 +1574,36 @@ void MainWindow::speakWord(const std::string &word)
                 QString("无法启动Flite引擎: %1\n尝试使用SAPI引擎").arg(flitePath));
             
             // 回退到SAPI
-            QString vbsCode = "Dim voice\n";
-            vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
-            vbsCode += "voice.Speak \"" + cleanedWord + "\"\n";
+            goto sapi_fallback;
+        }
+    }
+    return;
+    
+    // SAPI回退方案标签
+sapi_fallback:
+    {
+        QString vbsCode = "Dim voice\n";
+        vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
+        vbsCode += "voice.Speak \"" + cleanedWord + "\"\n";
+        
+        QString tempPath = QDir::tempPath();
+        QString vbsFile = tempPath + "/temp_speak.vbs";
+        
+        QFile file(vbsFile);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream out(&file);
+            out << vbsCode;
+            file.close();
             
-            QString tempPath = QDir::tempPath();
-            QString vbsFile = tempPath + "/temp_speak.vbs";
-            
-            QFile file(vbsFile);
-            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                QTextStream out(&file);
-                out << vbsCode;
-                file.close();
+            if (QFile::exists(vbsFile)) {
+                QString program = "wscript.exe";
+                QStringList args;
+                args << "//nologo" << vbsFile;
                 
-                if (QFile::exists(vbsFile)) {
-                    QString program = "wscript.exe";
-                    QStringList args;
-                    args << "//nologo" << vbsFile;
-                    
-                    QProcess sapiProcess;
-                    sapiProcess.start(program, args);
-                    sapiProcess.waitForFinished(5000);
-                    QFile::remove(vbsFile);
-                }
+                QProcess sapiProcess;
+                sapiProcess.start(program, args);
+                sapiProcess.waitForFinished(5000);
+                QFile::remove(vbsFile);
             }
         }
     }
@@ -1713,7 +1666,135 @@ void MainWindow::adjustButtons()
     }
 }
 
+bool MainWindow::checkFliteExecutable()
+{
+    // 获取应用程序当前目录
+    QString appDir = QCoreApplication::applicationDirPath();
+    
+    // 优先检查项目根目录下的flite.exe
+    QString flitePath = appDir + "/../flite.exe"; 
+    
+    // 检查项目根目录下的flite.exe是否存在
+    if (QFile::exists(flitePath)) {
+        return true;
+    }
+    
+    // 检查runtime目录下的flite.exe
+    flitePath = appDir + "/runtime/flite.exe";
+    
+    // 检查runtime目录下的flite.exe是否存在
+    if (QFile::exists(flitePath)) {
+        return true;
+    }
+    
+    // 检查系统路径中的flite.exe
+    flitePath = "flite.exe";
+    // 这里简单地检查一下，实际上可能需要更复杂的检查
+    return false;
+}
 
+void MainWindow::downloadFlite()
+{
+    // 创建下载进度对话框
+    downloadProgressDialog = new QProgressDialog("正在下载Flite语音引擎...", "取消", 0, 100, this);
+    downloadProgressDialog->setWindowModality(Qt::WindowModal);
+    downloadProgressDialog->setWindowTitle("下载Flite");
+    downloadProgressDialog->setAutoClose(false);
+    downloadProgressDialog->setAutoReset(false);
+    connect(downloadProgressDialog, &QProgressDialog::canceled, [=]() {
+        QMessageBox::information(this, "下载取消", "Flite语音引擎下载已取消。将使用系统默认的SAPI引擎。");
+    });
+    
+    // 显示进度对话框
+    downloadProgressDialog->show();
+    
+    // 创建网络请求
+    QNetworkRequest request;
+    request.setUrl(QUrl("https://files.zohopublic.com.cn/public/workdrive-public/download/yjkvs424b7768f75548168d2e6c9dd069868c?x-cli-msg=%7B%22linkId%22%3A%221GumWstoOyK-35NGn%22%2C%22isFileOwner%22%3Afalse%2C%22version%22%3A%221.0%22%2C%22isWDSupport%22%3Afalse%7D"));
+    request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+    
+    // 发起GET请求
+    QNetworkReply* reply = networkManager->get(request);
+    
+    // 连接下载进度信号
+    connect(reply, &QNetworkReply::downloadProgress, this, &MainWindow::onDownloadProgress);
+}
+
+void MainWindow::onDownloadProgress(qint64 bytesReceived, qint64 bytesTotal)
+{
+    if (downloadProgressDialog && bytesTotal > 0) {
+        int percent = static_cast<int>((bytesReceived * 100) / bytesTotal);
+        downloadProgressDialog->setValue(percent);
+        
+        // 更新进度对话框的标签
+        QString labelText = QString("正在下载Flite语音引擎... (%1MB/%2MB)")
+                           .arg(bytesReceived / (1024 * 1024), 0, 'f', 1)
+                           .arg(bytesTotal / (1024 * 1024), 0, 'f', 1);
+        downloadProgressDialog->setLabelText(labelText);
+    }
+}
+
+void MainWindow::onDownloadFinished(QNetworkReply* reply)
+{
+    if (reply->error() == QNetworkReply::NoError) {
+        // 下载成功
+        QByteArray data = reply->readAll();
+        
+        // 获取应用程序目录
+        QString appDir = QCoreApplication::applicationDirPath();
+        
+        // 确保runtime目录存在
+        QDir runtimeDir(appDir + "/runtime");
+        if (!runtimeDir.exists()) {
+            runtimeDir.mkpath(".");
+        }
+        
+        // 保存文件到runtime目录
+        QString flitePath = appDir + "/runtime/flite.exe";
+        QFile file(flitePath);
+        if (file.open(QIODevice::WriteOnly)) {
+            file.write(data);
+            file.close();
+            
+            // 关闭进度对话框
+            if (downloadProgressDialog) {
+                downloadProgressDialog->close();
+                delete downloadProgressDialog;
+                downloadProgressDialog = nullptr;
+            }
+            
+            QMessageBox::information(this, "下载完成", 
+                "Flite语音引擎下载完成！现在可以使用Flite引擎进行语音朗读了。\n\n"
+                "您可以在设置中切换语音引擎。");
+        } else {
+            // 关闭进度对话框
+            if (downloadProgressDialog) {
+                downloadProgressDialog->close();
+                delete downloadProgressDialog;
+                downloadProgressDialog = nullptr;
+            }
+            
+            QMessageBox::warning(this, "保存失败", 
+                "无法保存Flite语音引擎到文件: " + file.errorString() + "\n\n"
+                "将使用系统默认的SAPI引擎。");
+        }
+    } else {
+        // 下载失败
+        // 关闭进度对话框
+        if (downloadProgressDialog) {
+            downloadProgressDialog->close();
+            delete downloadProgressDialog;
+            downloadProgressDialog = nullptr;
+        }
+        
+        QMessageBox::warning(this, "下载失败", 
+            "无法下载Flite语音引擎: " + reply->errorString() + "\n\n"
+            "将使用系统默认的SAPI引擎。");
+    }
+    
+    // 清理reply对象
+    reply->deleteLater();
+}
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {

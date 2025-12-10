@@ -40,10 +40,17 @@
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QDirIterator>
+#include <QProgressDialog>
 #include <cmath>
 #include <windows.h>
 #include <vector>
 #include <string>
+
+// 网络相关头文件
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QUrl>
 
 // 注意：现在使用runtime目录下的flite.exe命令行工具，不再直接包含flite头文件
 // #ifdef FLITE_ENABLED
@@ -85,6 +92,10 @@ private slots:
     void onShowAbout();        // 新增：显示关于界面
     void onShowGuide();        // 新增：显示指南界面
     void onUpdateWelcomeAnimation(); // 新增：更新欢迎语动画
+    
+    // 网络下载相关槽函数
+    void onDownloadFinished(QNetworkReply* reply);
+    void onDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
 
 private:
     // UI控件
@@ -133,6 +144,10 @@ private:
     QPushButton *backToMainButton;
     QScrollArea *answersScrollArea;
     
+    // 网络下载相关
+    QNetworkAccessManager *networkManager;
+    QProgressDialog *downloadProgressDialog;
+    
     // 功能相关
     std::vector<std::string> words;
     std::vector<std::string> cachedWords; // 缓存的单词
@@ -168,5 +183,9 @@ private:
     void createTempWordlist(); // 创建临时词库文件
     void saveToTempWordlist(); // 保存到临时词库文件
     void loadFromTempWordlist(); // 从临时词库加载
+    
+    // 网络下载相关方法
+    void downloadFlite();
+    bool checkFliteExecutable();
 };
 #endif // MAINWINDOW_H

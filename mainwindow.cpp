@@ -1562,45 +1562,41 @@ void MainWindow::speakWord(const std::string &word)
             }
         }
     } else if (speechEngine == 1) { // Flite
-        // 尝试使用runtime目录下的flite.exe命令行工具
-        QProcess fliteProcess;
-        
-        // 生成临时WAV文件
-        QString tempWavFile = QDir::tempPath() + "/temp_flite_speech.wav";
-        
-        // 准备参数：将文本转换为WAV文件
-        QStringList args;
-        args << "-t" << cleanedWord << "-o" << tempWavFile << "-voice" << "cmu_us_kal";
-        
         // 获取应用程序当前目录
         QString appDir = QCoreApplication::applicationDirPath();
-        QString flitePath = appDir + "/runtime/flite.exe";
         
-        // 检查runtime目录下的flite.exe是否存在
+        // 优先检查项目根目录下的flite.exe
+        QString flitePath = appDir + "/../flite.exe"; 
+        
+        // 检查项目根目录下的flite.exe是否存在
         if (!QFile::exists(flitePath)) {
-            // 如果runtime目录下不存在，尝试直接调用flite.exe（系统路径中）
-            fliteProcess.start("flite.exe", args);
-        } else {
-            // 使用runtime目录下的flite.exe
-            fliteProcess.start(flitePath, args);
+            // 检查runtime目录下的flite.exe
+            flitePath = appDir + "/runtime/flite.exe";
+            
+            // 检查runtime目录下的flite.exe是否存在
+            if (!QFile::exists(flitePath)) {
+                // 如果runtime目录下不存在，尝试直接调用flite.exe（系统路径中）
+                flitePath = "flite.exe";
+            }
         }
+
+        // 使用QProcess代替system函数，避免cmd窗口闪烁
+        QProcess process;
+        QStringList arguments;
+        arguments << "-t" << cleanedWord << "-voice" << "cmu_us_slt";
         
-        if (fliteProcess.waitForFinished(5000)) { // 等待最多5秒
-            // 检查是否成功生成了音频文件
-            QFile audioFile(tempWavFile);
-            if (audioFile.exists()) {
-                // 使用QProcess播放音频文件
-                QProcess playProcess;
-                QStringList playArgs;
-                playArgs << "/play" << tempWavFile << "/close";
-                playProcess.start("sndrec32.exe", playArgs);
-                playProcess.waitForFinished(5000);
+        // 启动进程并等待完成
+        process.start(flitePath, arguments);
+        if(process.waitForStarted(3000)) {  // 等待最多3秒启动
+            process.waitForFinished(5000);  // 等待最多5秒完成
+            
+            // 检查进程是否成功执行
+            if(process.exitCode() != 0) {
+                // 如果Flite执行失败，尝试使用SAPI作为备选方案
+                QMessageBox::warning(this, "朗读失败", 
+                    QString("Flite引擎朗读失败，错误码: %1\n尝试使用SAPI引擎").arg(process.exitCode()));
                 
-                // 删除临时音频文件
-                QFile::remove(tempWavFile);
-            } else {
-                qDebug() << "Flite failed to generate audio file for: " << cleanedWord;
-                // 如果flite命令失败，回退到SAPI
+                // 回退到SAPI
                 QString vbsCode = "Dim voice\n";
                 vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
                 vbsCode += "voice.Speak \"" + cleanedWord + "\"\n";
@@ -1615,20 +1611,23 @@ void MainWindow::speakWord(const std::string &word)
                     file.close();
                     
                     if (QFile::exists(vbsFile)) {
-                        QProcess process;
-                        QStringList arguments;
-                        arguments << "//nologo" << vbsFile;
+                        QString program = "wscript.exe";
+                        QStringList args;
+                        args << "//nologo" << vbsFile;
                         
-                        process.start("wscript.exe", arguments);
-                        process.waitForFinished(5000);
-                        
+                        QProcess sapiProcess;
+                        sapiProcess.start(program, args);
+                        sapiProcess.waitForFinished(5000);
                         QFile::remove(vbsFile);
                     }
                 }
             }
         } else {
-            qDebug() << "Flite process failed to start or timed out for: " << cleanedWord;
-            // 如果flite启动失败，回退到SAPI
+            // 如果Flite启动失败，尝试使用SAPI作为备选方案
+            QMessageBox::warning(this, "启动失败", 
+                QString("无法启动Flite引擎: %1\n尝试使用SAPI引擎").arg(flitePath));
+            
+            // 回退到SAPI
             QString vbsCode = "Dim voice\n";
             vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
             vbsCode += "voice.Speak \"" + cleanedWord + "\"\n";
@@ -1643,13 +1642,13 @@ void MainWindow::speakWord(const std::string &word)
                 file.close();
                 
                 if (QFile::exists(vbsFile)) {
-                    QProcess process;
-                    QStringList arguments;
-                    arguments << "//nologo" << vbsFile;
+                    QString program = "wscript.exe";
+                    QStringList args;
+                    args << "//nologo" << vbsFile;
                     
-                    process.start("wscript.exe", arguments);
-                    process.waitForFinished(5000);
-                    
+                    QProcess sapiProcess;
+                    sapiProcess.start(program, args);
+                    sapiProcess.waitForFinished(5000);
                     QFile::remove(vbsFile);
                 }
             }

@@ -7,7 +7,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # 查找Qt6组件
-find_package(Qt6 COMPONENTS Core Widgets Network Multimedia REQUIRED)
+find_package(Qt6 COMPONENTS Core Widgets Network REQUIRED)
 
 # 查找Flite库
 find_library(FLITE_LIB flite HINTS "D:/msys64/mingw64/lib")
@@ -26,7 +26,6 @@ target_link_libraries(QtEnglishListen
     Qt6::Core 
     Qt6::Widgets
     Qt6::Network
-    Qt6::Multimedia
 )
 
 # 如果找到了Flite库，则链接它

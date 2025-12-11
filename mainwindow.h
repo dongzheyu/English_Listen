@@ -41,6 +41,11 @@
 #include <QLabel>
 #include <QDirIterator>
 #include <QProgressDialog>
+#include <QStyleHints>
+#include <QComboBox>
+#include <QCheckBox>
+#include <QGroupBox>
+#include <QSpinBox>
 #include <cmath>
 #include <windows.h>
 #include <vector>
@@ -183,9 +188,13 @@ private:
     void createTempWordlist(); // 创建临时词库文件
     void saveToTempWordlist(); // 保存到临时词库文件
     void loadFromTempWordlist(); // 从临时词库加载
+    bool testFliteEngine(); // 测试Flite引擎是否正常工作
     
     // 网络下载相关方法
     void downloadFlite();
     bool checkFliteExecutable();
+    
+    // 新增设置窗口函数
+    void showSettingsDialog();
 };
 #endif // MAINWINDOW_H

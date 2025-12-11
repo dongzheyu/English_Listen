@@ -60,7 +60,8 @@ MainWindow::MainWindow(QWidget *parent)
     loadWordlistFiles();
     loadSettings();
     createTempWordlist();
-    loadFromTempWordlist();
+    // 注释掉这行，避免在启动时自动加载临时词库文件
+    // loadFromTempWordlist();
     startWelcomeAnimation();
 }
 
@@ -619,6 +620,14 @@ void MainWindow::showMainInterface()
 
     // 启动欢迎语动画
     startWelcomeAnimation();
+    
+    // 重新连接主界面设置按钮的信号槽
+    if (settingsButton) {
+        // 断开可能存在的旧连接
+        disconnect(settingsButton, &QPushButton::clicked, this, &MainWindow::onShowSettings);
+        // 重新连接设置按钮
+        connect(settingsButton, &QPushButton::clicked, this, &MainWindow::onShowSettings);
+    }
 }
 
 void MainWindow::showWordsInterface()
@@ -650,6 +659,19 @@ void MainWindow::showTestInterface()
 
     // 显示测试界面
     if (testWidget) testWidget->show();
+    
+    // 查找并连接测试界面的设置按钮
+    if (testWidget) {
+        QList<QPushButton*> buttons = testWidget->findChildren<QPushButton*>();
+        for (QPushButton* button : buttons) {
+            if (button->text() == "设置") {
+                // 断开之前的连接（如果有）
+                disconnect(button, &QPushButton::clicked, this, &MainWindow::onShowSettings);
+                // 重新连接设置按钮
+                connect(button, &QPushButton::clicked, this, &MainWindow::onShowSettings);
+            }
+        }
+    }
 }
 
 void MainWindow::showAnswersInterface()
@@ -716,10 +738,12 @@ void MainWindow::onViewWords()
         connect(&buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
         connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
         
-        // 如果用户关闭对话框（包括点击X按钮），视为跳过
-        if (dialog.exec() == QDialog::Accepted) {
+        // 显示对话框并处理用户选择
+        int result = dialog.exec();
+        if (result == QDialog::Accepted) {
             // 获取选中的文件
             QList<QListWidgetItem*> selectedItems = fileListView.selectedItems();
+            // 只有当选中了文件时才执行加载操作
             if (!selectedItems.isEmpty()) {
                 // 清空当前词库
                 words.clear();
@@ -732,8 +756,9 @@ void MainWindow::onViewWords()
                     loadWordsFromFile(filePath);
                 }
             }
+            // 如果没有选中文件，则不执行任何加载操作，保持当前词库不变
         }
-        // 如果是Rejected（点击跳过或关闭窗口），则不执行任何加载操作
+        // 如果是Rejected（点击跳过或关闭窗口），则不执行任何加载操作，保持当前词库不变
     }
     
     // 显示单词界面
@@ -1722,7 +1747,7 @@ bool MainWindow::checkFliteExecutable()
     QString appDir = QCoreApplication::applicationDirPath();
 
     // 优先检查项目根目录下的flite.exe
-    QString flitePath = appDir + "/../flite.exe";
+    QString flitePath = appDir + "/flite.exe";
 
     // 检查项目根目录下的flite.exe是否存在
     if (QFile::exists(flitePath)) {
@@ -1751,10 +1776,7 @@ void MainWindow::downloadFlite()
     downloadProgressDialog->setWindowTitle("下载Flite");
     downloadProgressDialog->setAutoClose(false);
     downloadProgressDialog->setAutoReset(false);
-    connect(downloadProgressDialog, &QProgressDialog::canceled, [=]() {
-        QMessageBox::information(this, "下载取消", "Flite语音引擎下载已取消。将使用系统默认的SAPI引擎。");
-    });
-
+    
     // 显示进度对话框
     downloadProgressDialog->show();
 
@@ -1768,6 +1790,22 @@ void MainWindow::downloadFlite()
 
     // 连接下载进度信号
     connect(reply, &QNetworkReply::downloadProgress, this, &MainWindow::onDownloadProgress);
+    connect(downloadProgressDialog, &QProgressDialog::canceled, [=]() {
+        if (reply && reply->isRunning()) {
+            reply->abort();
+        }
+        
+        QMessageBox::information(this, "下载取消", "Flite语音引擎下载已取消。将使用系统默认的SAPI引擎。");
+        // 清理进度对话框
+        if (downloadProgressDialog) {
+            downloadProgressDialog->close();
+            delete downloadProgressDialog;
+            downloadProgressDialog = nullptr;
+        }
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        this->onDownloadFinished(reply);
+    });
 }
 
 void MainWindow::onDownloadProgress(qint64 bytesReceived, qint64 bytesTotal)
@@ -1852,7 +1890,7 @@ bool MainWindow::testFliteEngine()
     QString appDir = QCoreApplication::applicationDirPath();
 
     // 优先检查项目根目录下的flite.exe
-    QString flitePath = appDir + "/../flite.exe";
+    QString flitePath = appDir + "/flite.exe";
 
     // 检查项目根目录下的flite.exe是否存在
     if (!QFile::exists(flitePath)) {
@@ -2004,6 +2042,19 @@ void MainWindow::showSettingsDialog()
     
     mainLayout->addWidget(speechGroup);
     
+    // 添加Flite下载按钮
+    QPushButton *downloadFliteButton = new QPushButton("下载Flite语音引擎", dialog);
+    mainLayout->addWidget(downloadFliteButton);
+    
+    // 连接Flite下载按钮的信号和槽
+    connect(downloadFliteButton, &QPushButton::clicked, [=]() {
+        // 隐藏设置对话框
+        dialog->hide();
+        
+        // 下载Flite
+        downloadFlite();
+    });
+    
     // 添加引擎说明
     QLabel *engineDescription = new QLabel(
         "SAPI是Windows系统内置语音引擎，Flite是轻量级第三方引擎。"
@@ -2059,8 +2110,8 @@ void MainWindow::showSettingsDialog()
             QString appDir = QCoreApplication::applicationDirPath();
             
             // 优先检查项目根目录下的flite.exe
-            QString flitePath = appDir + "/../flite.exe"; 
-            
+            QString flitePath = appDir + "/flite.exe";
+
             // 检查项目根目录下的flite.exe是否存在
             if (!QFile::exists(flitePath)) {
                 // 检查runtime目录下的flite.exe

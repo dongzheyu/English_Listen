@@ -625,7 +625,7 @@ void MainWindow::showMainInterface()
     if (settingsButton) {
         // 断开可能存在的旧连接
         disconnect(settingsButton, &QPushButton::clicked, this, &MainWindow::onShowSettings);
-        // 重新连接设置按钮
+        // 重新连接设置按钮，使用Lambda表达式确保只连接一次
         connect(settingsButton, &QPushButton::clicked, this, &MainWindow::onShowSettings);
     }
 }
@@ -782,7 +782,7 @@ void MainWindow::onShowAbout()
     aboutBox.setFont(aboutFont);
     
     aboutBox.setText(
-        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.0</h2>"
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.1</h2>"
         "<p style='font-family: Microsoft YaHei;'>一个帮助学习英语的听写练习工具</p>"
         "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，支持 Windows SAPI 和 Flite 语音引擎。</p>"
         "<h3 style='font-family: Microsoft YaHei;'>功能特点：</h3>"
@@ -801,6 +801,7 @@ void MainWindow::onShowAbout()
         "<li>设置功能整合到统一窗口</li>"
         "<li>模型设置中增加试听功能</li>"
         "<li>测试界面添加时间间隔设置</li>"
+        "<li>修复设置对话框非模态导致的界面交互问题</li>"
         "</ul>"
         "<p style='font-family: Microsoft YaHei;'>版权 © 2025 JetCPP。本软件使用 MIT 许可证发布。</p>"
         "<p style='font-family: Microsoft YaHei;'>GitHub 仓库地址：<a href='https://github.com/dongzheyu/English_Listen'>https://github.com/dongzheyu/English_Listen</a></p>"
@@ -1971,6 +1972,7 @@ void MainWindow::showSettingsDialog()
     QDialog *dialog = new QDialog(this);
     dialog->setWindowTitle("设置");
     dialog->resize(400, 350);
+    dialog->setModal(true); // 设置为模态对话框
 
     QVBoxLayout *mainLayout = new QVBoxLayout(dialog);
 

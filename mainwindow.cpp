@@ -782,7 +782,7 @@ void MainWindow::onShowAbout()
     aboutBox.setFont(aboutFont);
     
     aboutBox.setText(
-        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.1</h2>"
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.2</h2>"
         "<p style='font-family: Microsoft YaHei;'>一个帮助学习英语的听写练习工具</p>"
         "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，支持 Windows SAPI 和 Flite 语音引擎。</p>"
         "<h3 style='font-family: Microsoft YaHei;'>功能特点：</h3>"
@@ -802,6 +802,7 @@ void MainWindow::onShowAbout()
         "<li>模型设置中增加试听功能</li>"
         "<li>测试界面添加时间间隔设置</li>"
         "<li>修复设置对话框非模态导致的界面交互问题</li>"
+        "<li>修复Flite语音引擎下载完成后错误显示\"下载取消\"提示的问题</li>"
         "</ul>"
         "<p style='font-family: Microsoft YaHei;'>版权 © 2025 JetCPP。本软件使用 MIT 许可证发布。</p>"
         "<p style='font-family: Microsoft YaHei;'>GitHub 仓库地址：<a href='https://github.com/dongzheyu/English_Listen'>https://github.com/dongzheyu/English_Listen</a></p>"
@@ -1794,14 +1795,14 @@ void MainWindow::downloadFlite()
     connect(downloadProgressDialog, &QProgressDialog::canceled, [=]() {
         if (reply && reply->isRunning()) {
             reply->abort();
-        }
-        
-        QMessageBox::information(this, "下载取消", "Flite语音引擎下载已取消。将使用系统默认的SAPI引擎。");
-        // 清理进度对话框
-        if (downloadProgressDialog) {
-            downloadProgressDialog->close();
-            delete downloadProgressDialog;
-            downloadProgressDialog = nullptr;
+            
+            QMessageBox::information(this, "下载取消", "Flite语音引擎下载已取消。将使用系统默认的SAPI引擎。");
+            // 清理进度对话框
+            if (downloadProgressDialog) {
+                downloadProgressDialog->close();
+                delete downloadProgressDialog;
+                downloadProgressDialog = nullptr;
+            }
         }
     });
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {

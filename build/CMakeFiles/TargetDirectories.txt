@@ -1,5 +1,0 @@
-D:/c++/English-Listen/build/CMakeFiles/QtEnglishListen.dir
-D:/c++/English-Listen/build/CMakeFiles/edit_cache.dir
-D:/c++/English-Listen/build/CMakeFiles/rebuild_cache.dir
-D:/c++/English-Listen/build/CMakeFiles/QtEnglishListen_autogen_timestamp_deps.dir
-D:/c++/English-Listen/build/CMakeFiles/QtEnglishListen_autogen.dir

@@ -74,3 +74,24 @@ if(WIN32)
         COMMENT "使用SignTool对可执行文件进行数字签名"
     )
 endif()
+
+# 添加发布配置
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    # 优化编译选项
+    target_compile_options(QtEnglishListen PRIVATE 
+        $<$<CXX_COMPILER_ID:MSVC>:/O2 /GL>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-O3 -flto>
+    )
+    
+    # 链接时优化
+    set_target_properties(QtEnglishListen PROPERTIES
+        INTERPROCEDURAL_OPTIMIZATION TRUE
+    )
+    
+    # 添加发布后处理命令
+    add_custom_command(TARGET QtEnglishListen POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Release build completed successfully!"
+        COMMAND ${CMAKE_COMMAND} -E echo "Executable: $<TARGET_FILE:QtEnglishListen>"
+        COMMENT "Release build post-processing"
+    )
+endif()

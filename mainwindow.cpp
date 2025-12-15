@@ -267,13 +267,9 @@ void MainWindow::setupUI()
         QPushButton *applyIntervalButton = new QPushButton("应用", testWidget);
         applyIntervalButton->setFixedSize(60, 30);
         
-        QPushButton *settingsButton = new QPushButton("设置", testWidget);
-        settingsButton->setFixedSize(60, 30);
-        
         settingsLayout->addWidget(intervalLabel);
         settingsLayout->addWidget(intervalSpinBox);
         settingsLayout->addWidget(applyIntervalButton);
-        settingsLayout->addWidget(settingsButton);
         settingsLayout->addStretch(); // 添加弹簧，将控件推到左侧
 
         // 创建控制按钮布局
@@ -346,11 +342,6 @@ void MainWindow::setupUI()
             saveSettings(); // 保存设置
             QMessageBox::information(testWidget, "设置成功", 
                 QString("朗读时间间隔已设置为 %1 秒").arg(readInterval));
-        });
-        
-        // 连接设置按钮
-        connect(settingsButton, &QPushButton::clicked, [=]() {
-            showSettingsDialog();
         });
 
         testLayout->addWidget(countdownLabel);
@@ -613,7 +604,11 @@ void MainWindow::showMainInterface()
 
     // 显示主页界面元素
     QWidget *homeWidget = centralWidget->layout()->itemAt(0)->widget();
-    if (homeWidget) homeWidget->show();
+    if (homeWidget) {
+        homeWidget->show();
+        // 确保主页界面能接收焦点
+        homeWidget->setEnabled(true);
+    }
 
     // 更新欢迎语
     updateWelcomeMessage();
@@ -621,12 +616,9 @@ void MainWindow::showMainInterface()
     // 启动欢迎语动画
     startWelcomeAnimation();
     
-    // 重新连接主界面设置按钮的信号槽
+    // 确保设置按钮能接收点击
     if (settingsButton) {
-        // 断开可能存在的旧连接
-        disconnect(settingsButton, &QPushButton::clicked, this, &MainWindow::onShowSettings);
-        // 重新连接设置按钮，使用Lambda表达式确保只连接一次
-        connect(settingsButton, &QPushButton::clicked, this, &MainWindow::onShowSettings);
+        settingsButton->setEnabled(true);
     }
 }
 
@@ -660,18 +652,7 @@ void MainWindow::showTestInterface()
     // 显示测试界面
     if (testWidget) testWidget->show();
     
-    // 查找并连接测试界面的设置按钮
-    if (testWidget) {
-        QList<QPushButton*> buttons = testWidget->findChildren<QPushButton*>();
-        for (QPushButton* button : buttons) {
-            if (button->text() == "设置") {
-                // 断开之前的连接（如果有）
-                disconnect(button, &QPushButton::clicked, this, &MainWindow::onShowSettings);
-                // 重新连接设置按钮
-                connect(button, &QPushButton::clicked, this, &MainWindow::onShowSettings);
-            }
-        }
-    }
+    
 }
 
 void MainWindow::showAnswersInterface()
@@ -767,6 +748,7 @@ void MainWindow::onViewWords()
 
 void MainWindow::onShowSettings()
 {
+    qDebug() << "设置按钮被点击";
     showSettingsDialog();
 }
 

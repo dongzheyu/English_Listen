@@ -67,11 +67,11 @@ if(WIN32)
         )
     endif()
     
-    # 构建后自动签名
+    # 构建后自动签名（使用指纹签名）
     add_custom_command(
         TARGET QtEnglishListen POST_BUILD
-        COMMAND "D:/SignTool-10.0.22621.6-x64/signtool.exe" sign /f "D:/数字签名/English-Listen.pfx" /p DZY@013520 /t http://timestamp.digicert.com /fd SHA256 "$<TARGET_FILE:QtEnglishListen>"
-        COMMENT "使用SignTool对可执行文件进行数字签名"
+        COMMAND "D:/SignTool-10.0.22621.6-x64/signtool.exe" sign /sha1 02FD515617FB5BF6541508ACA7651728C6CB8118 /t http://timestamp.digicert.com /fd SHA256 "$<TARGET_FILE:QtEnglishListen>"
+        COMMENT "使用SignTool对可执行文件进行数字签名（指纹签名）"
     )
 endif()
 

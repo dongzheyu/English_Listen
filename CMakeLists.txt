@@ -61,7 +61,7 @@ if(WIN32)
         get_filename_component(FLITE_LIB_NAME ${FLITE_LIB} NAME)
         get_filename_component(FLITE_LIB_DIR ${FLITE_LIB} DIRECTORY)
         add_custom_command(
-            TARGET QtEnglishListen POST_BUILD
+            TARGET QtEnglishListedn POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FLITE_LIB_DIR}/${FLITE_LIB_NAME}" "$<TARGET_FILE_DIR:QtEnglishListen>/" || echo "Warning: Could not copy Flite library."
             COMMENT "Copying Flite runtime library"
         )

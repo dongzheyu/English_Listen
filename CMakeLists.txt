@@ -9,9 +9,9 @@ set(CMAKE_AUTOUIC ON)
 # 查找Qt6组件
 find_package(Qt6 COMPONENTS Core Widgets Network REQUIRED)
 
-# 查找Flite库
-find_library(FLITE_LIB flite HINTS "D:/msys64/mingw64/lib")
-find_path(FLITE_INCLUDE_DIR flite.h HINTS "D:/msys64/mingw64/include")
+# 注释掉Flite库查找，因为项目使用flite.exe命令行工具而非库文件
+# find_library(FLITE_LIB flite HINTS "D:/msys64/mingw64/lib")
+# find_path(FLITE_INCLUDE_DIR flite.h HINTS "D:/msys64/mingw64/include")
 
 # 添加Qt版本可执行文件
 add_executable(QtEnglishListen
@@ -28,13 +28,13 @@ target_link_libraries(QtEnglishListen
     Qt6::Network
 )
 
-# 如果找到了Flite库，则链接它
-if(FLITE_LIB AND FLITE_INCLUDE_DIR)
-    target_link_libraries(QtEnglishListen ${FLITE_LIB})
-    target_include_directories(QtEnglishListen PRIVATE ${FLITE_INCLUDE_DIR})
-    # 添加预处理器定义，标记Flite已启用
-    target_compile_definitions(QtEnglishListen PRIVATE FLITE_ENABLED)
-endif()
+# 不再链接Flite库，因为项目使用flite.exe命令行工具
+# if(FLITE_LIB AND FLITE_INCLUDE_DIR)
+#     target_link_libraries(QtEnglishListen ${FLITE_LIB})
+#     target_include_directories(QtEnglishListen PRIVATE ${FLITE_INCLUDE_DIR})
+#     # 添加预处理器定义，标记Flite已启用
+#     target_compile_definitions(QtEnglishListen PRIVATE FLITE_ENABLED)
+# endif()
 
 # Windows特定设置
 if(WIN32)
@@ -56,16 +56,16 @@ if(WIN32)
         COMMENT "Deploying Qt libraries and C++ runtime with windeployqt"
     )
     
-    # 构建后复制Flite运行时库（如果找到了Flite库）
-    if(FLITE_LIB)
-        get_filename_component(FLITE_LIB_NAME ${FLITE_LIB} NAME)
-        get_filename_component(FLITE_LIB_DIR ${FLITE_LIB} DIRECTORY)
-        add_custom_command(
-            TARGET QtEnglishListen POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FLITE_LIB_DIR}/${FLITE_LIB_NAME}" "$<TARGET_FILE_DIR:QtEnglishListen>/" || echo "Warning: Could not copy Flite library."
-            COMMENT "Copying Flite runtime library"
-        )
-    endif()
+    # 不再复制Flite库文件，因为项目使用flite.exe命令行工具
+    # if(FLITE_LIB)
+    #     get_filename_component(FLITE_LIB_NAME ${FLITE_LIB} NAME)
+    #     get_filename_component(FLITE_LIB_DIR ${FLITE_LIB} DIRECTORY)
+    #     add_custom_command(
+    #         TARGET QtEnglishListen POST_BUILD
+    #         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FLITE_LIB_DIR}/${FLITE_LIB_NAME}" "$<TARGET_FILE_DIR:QtEnglishListen>/" || echo "Warning: Could not copy Flite library."
+    #         COMMENT "Copying Flite runtime library"
+    #     )
+    # endif()
     
     # 构建后自动签名（使用指纹签名）
     add_custom_command(

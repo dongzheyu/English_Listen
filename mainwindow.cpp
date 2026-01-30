@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include <QProgressDialog>
 
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , centralWidget(nullptr)
@@ -49,16 +50,22 @@ MainWindow::MainWindow(QWidget *parent)
     , wordlistDirPath("./wordlist")
     , tempWordlistFile("")
     , speechEngine(0)
+
+
 {
     // 初始化网络管理器
     networkManager = new QNetworkAccessManager(this);
     connect(networkManager, &QNetworkAccessManager::finished,
             this, &MainWindow::onDownloadFinished);
 
+    // 加载设置
+    loadSettings();
+    
+
+
     setupUI();
     checkWordlistDirectory();
     loadWordlistFiles();
-    loadSettings();
     createTempWordlist();
     // 注释掉这行，避免在启动时自动加载临时词库文件
     // loadFromTempWordlist();
@@ -325,6 +332,7 @@ void MainWindow::setupUI()
                 if (timer) timer->stop();
                 startButton->setEnabled(true);
                 showMainInterface();
+
             }
             // 如果用户选择返回或者关闭对话框，则继续测试
         });
@@ -522,12 +530,6 @@ void MainWindow::toggleTheme()
         if (pauseResumeButton) pauseResumeButton->setStyleSheet(buttonStyleDark);
         if (backToMainButton) backToMainButton->setStyleSheet(buttonStyleDark);
         if (aboutButton) aboutButton->setStyleSheet(buttonStyleDark);
-        if (addWordButton) addWordButton->setStyleSheet(buttonStyleDark);
-        if (removeWordButton) removeWordButton->setStyleSheet(buttonStyleDark);
-        if (clearWordsButton) clearWordsButton->setStyleSheet(buttonStyleDark);
-        if (loadWordsButton) loadWordsButton->setStyleSheet(buttonStyleDark);
-        if (saveWordsButton) saveWordsButton->setStyleSheet(buttonStyleDark);
-        if (backToHomeButton) backToHomeButton->setStyleSheet(buttonStyleDark);
 
         // 查找并设置主页的指南按钮样式
         for (auto button : centralWidget->findChildren<QPushButton*>()) {
@@ -569,12 +571,6 @@ void MainWindow::toggleTheme()
         if (pauseResumeButton) pauseResumeButton->setStyleSheet(buttonStyleLight);
         if (backToMainButton) backToMainButton->setStyleSheet(buttonStyleLight);
         if (aboutButton) aboutButton->setStyleSheet(buttonStyleLight);
-        if (addWordButton) addWordButton->setStyleSheet(buttonStyleLight);
-        if (removeWordButton) removeWordButton->setStyleSheet(buttonStyleLight);
-        if (clearWordsButton) clearWordsButton->setStyleSheet(buttonStyleLight);
-        if (loadWordsButton) loadWordsButton->setStyleSheet(buttonStyleLight);
-        if (saveWordsButton) saveWordsButton->setStyleSheet(buttonStyleLight);
-        if (backToHomeButton) backToHomeButton->setStyleSheet(buttonStyleLight);
 
         // 查找并设置主页的指南按钮样式
         for (auto button : centralWidget->findChildren<QPushButton*>()) {
@@ -993,6 +989,7 @@ void MainWindow::onStartTest()
 {
     if (words.empty()) {
         QMessageBox::warning(this, "警告", "词库为空，请先添加单词");
+
         return;
     }
 
@@ -1073,6 +1070,7 @@ void MainWindow::onNextWord()
             } else if (msgBox.clickedButton() == showAnswersButton) {
                 // 用户选择了"显示答案"，显示答案界面
                 showAnswersInterface();
+
             }
             // 移除了OK按钮的处理逻辑
         }
@@ -1156,6 +1154,7 @@ void MainWindow::onNextWordClicked()
         } else if (msgBox.clickedButton() == showAnswersButton) {
             // 用户选择了"显示答案"，显示答案界面
             showAnswersInterface();
+
         }
         // 移除了OK按钮的处理逻辑
     }
@@ -1187,6 +1186,10 @@ void MainWindow::onBackToMain()
     // 重新启用开始按钮
     if (startButton) startButton->setEnabled(true);
 }
+
+
+
+
 
 void MainWindow::checkWordlistDirectory()
 {
@@ -1372,6 +1375,8 @@ void MainWindow::loadSettings()
     // 加载语音引擎设置
     speechEngine = settings.value("speech/engine", 0).toInt(); // 默认为SAPI (0)
 
+
+
     // 确保时间间隔在合理范围内
     if (readInterval < 1 || readInterval > 60) {
         readInterval = 5;
@@ -1516,6 +1521,8 @@ void MainWindow::saveToTempWordlist()
     file.close();
 }
 
+
+
 void MainWindow::speakWord(const std::string &word)
 {
     // 清理输入文本，只保留安全的字符
@@ -1570,26 +1577,10 @@ void MainWindow::speakWord(const std::string &word)
             }
         }
     } else if (speechEngine == 1) { // Flite
-        // 获取应用程序当前目录
-        QString appDir = QCoreApplication::applicationDirPath();
+        QString flitePath = getFlitePath();
 
-        // 优先检查项目根目录下的flite.exe
-        QString flitePath = appDir + "/../flite.exe";
-
-        // 检查项目根目录下的flite.exe是否存在
-        if (!QFile::exists(flitePath)) {
-            // 检查runtime目录下的flite.exe
-            flitePath = appDir + "/runtime/flite.exe";
-
-            // 检查runtime目录下的flite.exe是否存在
-            if (!QFile::exists(flitePath)) {
-                // 如果runtime目录下不存在，尝试直接调用flite.exe（系统路径中）
-                flitePath = "flite.exe";
-            }
-        }
-
-        // 检查Flite可执行文件是否存在
-        if (!QFile::exists(flitePath)) {
+        // 检查Flite可执行文件是否存在（排除系统路径）
+        if (flitePath != "flite.exe" && !QFile::exists(flitePath)) {
             // 如果Flite不存在，提示用户是否要下载
             QMessageBox::StandardButton reply;
             reply = QMessageBox::question(this, "Flite未找到",
@@ -1725,30 +1716,35 @@ void MainWindow::adjustButtons()
     }
 }
 
-bool MainWindow::checkFliteExecutable()
+QString MainWindow::getFlitePath()
 {
     // 获取应用程序当前目录
     QString appDir = QCoreApplication::applicationDirPath();
 
     // 优先检查项目根目录下的flite.exe
     QString flitePath = appDir + "/flite.exe";
-
-    // 检查项目根目录下的flite.exe是否存在
     if (QFile::exists(flitePath)) {
-        return true;
+        return flitePath;
     }
 
     // 检查runtime目录下的flite.exe
     flitePath = appDir + "/runtime/flite.exe";
-
-    // 检查runtime目录下的flite.exe是否存在
     if (QFile::exists(flitePath)) {
-        return true;
+        return flitePath;
     }
 
-    // 检查系统路径中的flite.exe
-    flitePath = "flite.exe";
-    // 这里简单地检查一下，实际上可能需要更复杂的检查
+    // 返回系统路径中的flite.exe
+    return "flite.exe";
+}
+
+bool MainWindow::checkFliteExecutable()
+{
+    QString flitePath = getFlitePath();
+    // 检查文件是否存在（排除系统路径的情况）
+    if (flitePath != "flite.exe") {
+        return QFile::exists(flitePath);
+    }
+    // 对于系统路径，返回false（需要更复杂的检查）
     return false;
 }
 
@@ -1838,6 +1834,7 @@ void MainWindow::onDownloadFinished(QNetworkReply* reply)
             QMessageBox::information(this, "下载完成",
                 "Flite语音引擎下载完成！现在可以使用Flite引擎进行语音朗读了。\n\n"
                 "您可以在设置中切换语音引擎。");
+
         } else {
             // 关闭进度对话框
             if (downloadProgressDialog) {
@@ -1849,6 +1846,7 @@ void MainWindow::onDownloadFinished(QNetworkReply* reply)
             QMessageBox::warning(this, "保存失败",
                 "无法保存Flite语音引擎到文件: " + file.errorString() + "\n\n"
                 "将使用系统默认的SAPI引擎。");
+
         }
     } else {
         // 下载失败
@@ -1862,6 +1860,7 @@ void MainWindow::onDownloadFinished(QNetworkReply* reply)
         QMessageBox::warning(this, "下载失败",
             "无法下载Flite语音引擎: " + reply->errorString() + "\n\n"
             "将使用系统默认的SAPI引擎。");
+
     }
 
     // 清理reply对象
@@ -2043,9 +2042,11 @@ void MainWindow::showSettingsDialog()
     // 添加引擎说明
     QLabel *engineDescription = new QLabel(
         "SAPI是Windows系统内置语音引擎，Flite是轻量级第三方引擎。"
-        "Flite引擎支持多种语音模型选择。", dialog);
+        + QString("Flite引擎支持多种语音模型选择。"), dialog);
     engineDescription->setWordWrap(true);
     mainLayout->addWidget(engineDescription);
+    
+
 
     // 对话框按钮
     QDialogButtonBox *buttonBox = new QDialogButtonBox(
@@ -2075,105 +2076,107 @@ void MainWindow::showSettingsDialog()
         saveSettings(); // 立即保存设置
     });
     
-    // 试听功能
-    connect(previewButton, &QPushButton::clicked, [=]() {
-        // 获取当前选择的模型
-        QString selectedModel;
-        switch (modelComboBox->currentIndex()) {
-            case 0: selectedModel = "cmu_us_slt"; break;
-            case 1: selectedModel = "cmu_us_awb"; break;
-            case 2: selectedModel = "cmu_us_bdl"; break;
-            case 3: selectedModel = "cmu_us_jmk"; break;
-            case 4: selectedModel = "cmu_us_ksp"; break;
-            case 5: selectedModel = "cmu_us_rms"; break;
-            default: selectedModel = "cmu_us_slt"; break;
-        }
-        
-        // 试听功能
-        if (speechEngine == 1) { // Flite引擎
-            // 获取应用程序当前目录
-            QString appDir = QCoreApplication::applicationDirPath();
-            
-            // 优先检查项目根目录下的flite.exe
-            QString flitePath = appDir + "/flite.exe";
 
-            // 检查项目根目录下的flite.exe是否存在
-            if (!QFile::exists(flitePath)) {
-                // 检查runtime目录下的flite.exe
-                flitePath = appDir + "/runtime/flite.exe";
-                
-                // 检查runtime目录下的flite.exe是否存在
-                if (!QFile::exists(flitePath)) {
-                    // 如果runtime目录下不存在，尝试直接调用flite.exe（系统路径中）
-                    flitePath = "flite.exe";
-                }
-            }
-            
-            // 检查Flite可执行文件是否存在
-            if (!QFile::exists(flitePath)) {
-                QMessageBox::warning(dialog, "Flite未找到", 
-                    "Flite语音引擎未找到，请检查安装或切换到SAPI引擎。");
-                return;
-            }
-            
-            // 使用QProcess测试Flite引擎
-            QProcess process;
-            QStringList arguments;
-            arguments << "-t" << "Hello" << "-voice" << selectedModel;
-            
-            // 启动进程并等待完成
-            process.start(flitePath, arguments);
-            if(process.waitForStarted(3000)) {  // 等待最多3秒启动
-                process.waitForFinished(5000);  // 等待最多5秒完成
-                
-                // 检查进程是否成功执行
-                if(process.exitCode() != 0) {
-                    QMessageBox::warning(dialog, "朗读失败", 
-                        QString("Flite引擎朗读失败，错误码: %1").arg(process.exitCode()));
-                }
-            } else {
-                QMessageBox::warning(dialog, "启动失败", 
-                    QString("无法启动Flite引擎: %1").arg(flitePath));
-            }
-        } else { // SAPI引擎
-            // 构建VBScript代码
-            QString vbsCode = "Dim voice\n";
-            vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
-            vbsCode += "voice.Speak \"Hello\"\n";
-            
-            // 创建临时VBS文件
-            QString tempPath = QDir::tempPath();
-            QString vbsFile = tempPath + "/temp_speak_preview.vbs";
-            
-            QFile file(vbsFile);
-            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                QTextStream out(&file);
-                out << vbsCode;
-                file.close();
-                
-                // 执行VBS脚本
-                if (QFile::exists(vbsFile)) {
-                    QString program = "wscript.exe";
-                    QStringList arguments;
-                    arguments << "//nologo" << vbsFile;
-                    
-                    QProcess process;
-                    process.start(program, arguments);
-                    process.waitForFinished(5000); // 最多等待5秒
-                    
-                    // 删除临时文件
-                    QFile::remove(vbsFile);
-                }
-            }
-        }
-    });
-
-    connect(buttonBox, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
-    connect(buttonBox, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-
-    // 显示对话框
-    dialog->exec();
     
-    // 清理资源
-    dialog->deleteLater();
-}
+            // 试听功能
+            connect(previewButton, &QPushButton::clicked, [=]() {
+                // 获取当前选择的模型
+                QString selectedModel;
+                switch (modelComboBox->currentIndex()) {
+                    case 0: selectedModel = "cmu_us_slt"; break;
+                    case 1: selectedModel = "cmu_us_awb"; break;
+                    case 2: selectedModel = "cmu_us_bdl"; break;
+                    case 3: selectedModel = "cmu_us_jmk"; break;
+                    case 4: selectedModel = "cmu_us_ksp"; break;
+                    case 5: selectedModel = "cmu_us_rms"; break;
+                    default: selectedModel = "cmu_us_slt"; break;
+                }
+                
+                // 试听功能
+                if (speechEngine == 1) { // Flite引擎
+                    // 获取应用程序当前目录
+                    QString appDir = QCoreApplication::applicationDirPath();
+                    
+                    // 优先检查项目根目录下的flite.exe
+                    QString flitePath = appDir + "/flite.exe";
+    
+                    // 检查项目根目录下的flite.exe是否存在
+                    if (!QFile::exists(flitePath)) {
+                        // 检查runtime目录下的flite.exe
+                        flitePath = appDir + "/runtime/flite.exe";
+                        
+                        // 检查runtime目录下的flite.exe是否存在
+                        if (!QFile::exists(flitePath)) {
+                            // 如果runtime目录下不存在，尝试直接调用flite.exe（系统路径中）
+                            flitePath = "flite.exe";
+                        }
+                    }
+                    
+                    // 检查Flite可执行文件是否存在
+                    if (!QFile::exists(flitePath)) {
+                        QMessageBox::warning(dialog, "Flite未找到", 
+                            "Flite语音引擎未找到，请检查安装或切换到SAPI引擎。");
+                        return;
+                    }
+                    
+                    // 使用QProcess测试Flite引擎
+                    QProcess process;
+                    QStringList arguments;
+                    arguments << "-t" << "Hello" << "-voice" << selectedModel;
+                    
+                    // 启动进程并等待完成
+                    process.start(flitePath, arguments);
+                    if(process.waitForStarted(3000)) {  // 等待最多3秒启动
+                        process.waitForFinished(5000);  // 等待最多5秒完成
+                        
+                        // 检查进程是否成功执行
+                        if(process.exitCode() != 0) {
+                            QMessageBox::warning(dialog, "朗读失败", 
+                                QString("Flite引擎朗读失败，错误码: %1").arg(process.exitCode()));
+                        }
+                    } else {
+                        QMessageBox::warning(dialog, "启动失败", 
+                            QString("无法启动Flite引擎: %1").arg(flitePath));
+                    }
+                } else { // SAPI引擎
+                    // 构建VBScript代码
+                    QString vbsCode = "Dim voice\n";
+                    vbsCode += "Set voice = CreateObject(\"SAPI.SpVoice\")\n";
+                    vbsCode += "voice.Speak \"Hello\"\n";
+                    
+                    // 创建临时VBS文件
+                    QString tempPath = QDir::tempPath();
+                    QString vbsFile = tempPath + "/temp_speak_preview.vbs";
+                    
+                    QFile file(vbsFile);
+                    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                        QTextStream out(&file);
+                        out << vbsCode;
+                        file.close();
+                        
+                        // 执行VBS脚本
+                        if (QFile::exists(vbsFile)) {
+                            QString program = "wscript.exe";
+                            QStringList arguments;
+                            arguments << "//nologo" << vbsFile;
+                            
+                            QProcess process;
+                            process.start(program, arguments);
+                            process.waitForFinished(5000); // 最多等待5秒
+                            
+                            // 删除临时文件
+                            QFile::remove(vbsFile);
+                        }
+                    }
+                }
+            });
+    
+            connect(buttonBox, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+            connect(buttonBox, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    
+            // 显示对话框
+            dialog->exec();
+            
+            // 清理资源
+            dialog->deleteLater();
+        }

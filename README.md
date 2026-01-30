@@ -8,10 +8,6 @@ English Listen 是一款专为英语学习者设计的智能听写软件。它�
 
 ## 🌈 核心特色一览
 
-### 🔧 双模式操作
-- **图形界面版**：现代化的 Qt6 界面，操作直观友好
-- **命令行版**：极简风格，适合快速操作和技术控
-
 ### 📚 智能词库管理
 - 随心添加/删除单词
 - 支持批量导入导出
@@ -74,6 +70,38 @@ English Listen 是一款专为英语学习者设计的智能听写软件。它�
 ## 📄 许可协议
 
 本软件采用 MIT 许可证发布，详情请参阅 LICENSE 文件。
+
+## 🔧 静态编译说明
+
+为了方便部署，本项目支持静态编译，生成的可执行文件可以在没有安装Qt和C++运行时库的计算机上独立运行。
+
+### 静态编译配置
+
+在CMakeLists.txt中已配置静态编译选项，主要参数包括：
+- 使用 `-DCMAKE_BUILD_TYPE=Release`
+- 设置 `-DCMAKE_PREFIX_PATH="D:/msys64/mingw64/qt6-static"`
+- 设置 `-DCMAKE_FIND_LIBRARY_SUFFIXES=".a"`
+- 设置 `-DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++"`
+- 启用 `-DQT_STATICPLUGIN=ON` 和 `-DQT_STATIC_RUNTIME=ON`
+
+### 静态编译命令
+
+```bash
+mkdir build-static
+cd build-static
+cmake .. -G "MinGW Makefiles" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="D:/msys64/mingw64/qt6-static" \
+    -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++" \
+    -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
+    -DQT_STATICPLUGIN=ON \
+    -DQT_STATIC_RUNTIME=ON
+mingw32-make -j4
+```
+
+### 部署
+
+静态编译后的可执行文件是独立的，无需额外的DLL文件即可在Windows系统上运行。
 
 ---
 *让英语学习变得更简单、更有趣！*

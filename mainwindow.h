@@ -35,10 +35,7 @@
 #include <QMap>
 #include <QRegularExpression>
 #include <QDialog>
-#include <QListWidget>
 #include <QDialogButtonBox>
-#include <QVBoxLayout>
-#include <QLabel>
 #include <QDirIterator>
 #include <QProgressDialog>
 #include <QStyleHints>
@@ -193,8 +190,10 @@ private:
     // 网络下载相关方法
     void downloadFlite();
     bool checkFliteExecutable();
+    QString getFlitePath();  // 获取Flite可执行文件路径
     
     // 新增设置窗口函数
     void showSettingsDialog();
 };
+
 #endif // MAINWINDOW_H

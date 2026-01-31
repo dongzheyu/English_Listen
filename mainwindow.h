@@ -47,17 +47,13 @@
 #include <windows.h>
 #include <vector>
 #include <string>
+#include <random>  // for random shuffle
 
 // 网络相关头文件
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QUrl>
-
-// 注意：现在使用runtime目录下的flite.exe命令行工具，不再直接包含flite头文件
-// #ifdef FLITE_ENABLED
-// #include <flite.h>
-// #endif
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -164,6 +160,7 @@ private:
     QMap<QString, QString> wordlistFiles; // 词库文件列表
     QString tempWordlistFile; // 临时词库文件路径
     int speechEngine; // 语音引擎选择 (0=SAPI, 1=Flite)
+    bool isRandomOrder; // 是否随机播放单词
     
     void setupUI();
     void loadWordsFromFile(const QString &filename);
@@ -194,6 +191,9 @@ private:
     
     // 新增设置窗口函数
     void showSettingsDialog();
+    
+    // 随机播放相关函数
+    void toggleRandomOrder();
 };
 
 #endif // MAINWINDOW_H

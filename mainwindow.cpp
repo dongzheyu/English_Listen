@@ -50,6 +50,7 @@ MainWindow::MainWindow(QWidget *parent)
     , wordlistDirPath("./wordlist")
     , tempWordlistFile("")
     , speechEngine(0)
+    , isRandomOrder(false)
 
 
 {
@@ -760,7 +761,7 @@ void MainWindow::onShowAbout()
     aboutBox.setFont(aboutFont);
     
     aboutBox.setText(
-        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.2</h2>"
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.3</h2>"
         "<p style='font-family: Microsoft YaHei;'>一个帮助学习英语的听写练习工具</p>"
         "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，支持 Windows SAPI 和 Flite 语音引擎。</p>"
         "<h3 style='font-family: Microsoft YaHei;'>功能特点：</h3>"
@@ -991,6 +992,13 @@ void MainWindow::onStartTest()
         QMessageBox::warning(this, "警告", "词库为空，请先添加单词");
 
         return;
+    }
+
+    // 如果启用随机播放，则随机化单词列表
+    if (isRandomOrder) {
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(words.begin(), words.end(), g);
     }
 
     currentIndex = 0;
@@ -1374,6 +1382,9 @@ void MainWindow::loadSettings()
 
     // 加载语音引擎设置
     speechEngine = settings.value("speech/engine", 0).toInt(); // 默认为SAPI (0)
+    
+    // 加载随机播放设置
+    isRandomOrder = settings.value("test/randomOrder", false).toBool();
 
 
 
@@ -1400,6 +1411,9 @@ void MainWindow::saveSettings()
 
     // 保存语音引擎设置
     settings.setValue("speech/engine", speechEngine);
+    
+    // 保存随机播放设置
+    settings.setValue("test/randomOrder", isRandomOrder);
 
     // 确保数据写入磁盘
     settings.sync();
@@ -2026,6 +2040,14 @@ void MainWindow::showSettingsDialog()
     
     mainLayout->addWidget(speechGroup);
     
+    // 添加随机播放选项
+    QHBoxLayout *randomLayout = new QHBoxLayout;
+    QCheckBox *randomOrderCheckBox = new QCheckBox("随机播放单词", dialog);
+    randomOrderCheckBox->setChecked(isRandomOrder);
+    randomLayout->addWidget(randomOrderCheckBox);
+    randomLayout->addStretch(); // 添加弹簧，使复选框靠左对齐
+    speechLayout->addLayout(randomLayout);
+    
     // 添加Flite下载按钮
     QPushButton *downloadFliteButton = new QPushButton("下载Flite语音引擎", dialog);
     mainLayout->addWidget(downloadFliteButton);
@@ -2045,6 +2067,12 @@ void MainWindow::showSettingsDialog()
         + QString("Flite引擎支持多种语音模型选择。"), dialog);
     engineDescription->setWordWrap(true);
     mainLayout->addWidget(engineDescription);
+    
+    // 连接随机播放复选框的信号和槽
+    connect(randomOrderCheckBox, &QCheckBox::toggled, [=](bool checked) {
+        isRandomOrder = checked;
+        saveSettings();
+    });
     
 
 
@@ -2180,3 +2208,11 @@ void MainWindow::showSettingsDialog()
             // 清理资源
             dialog->deleteLater();
         }
+
+void MainWindow::toggleRandomOrder()
+{
+    isRandomOrder = !isRandomOrder;
+    
+    // 保存设置
+    saveSettings();
+}

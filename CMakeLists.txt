@@ -17,7 +17,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # 3. 查找 Qt6 组件
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Gui)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Gui Charts)
 
 # 4. 定义可执行文件
 add_executable(QtEnglishListen
@@ -33,6 +33,7 @@ target_link_libraries(QtEnglishListen
         Qt6::Widgets
         Qt6::Network
         Qt6::Gui
+        Qt6::Charts
 )
 
 # 6. Windows 平台特定配置

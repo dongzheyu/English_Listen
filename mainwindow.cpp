@@ -1,5 +1,27 @@
 #include "mainwindow.h"
 #include <QProgressDialog>
+#include <QKeyEvent>
+#include <QtCharts/QChart>
+#include <QtCharts/QLineSeries>
+#include <QtCharts/QBarSeries>
+#include <QtCharts/QBarSet>
+#include <QtCharts/QValueAxis>
+#include <QtCharts/QCategoryAxis>
+#include <QtCharts/QChartView>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonValue>
+#include <QMenu>
+#include <QAction>
+#include <QInputDialog>
+#include <QTimer>
+#include <QShowEvent>
+#include <QHideEvent>
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -51,6 +73,8 @@ MainWindow::MainWindow(QWidget *parent)
     , tempWordlistFile("")
     , speechEngine(0)
     , isRandomOrder(false)
+    , wordsTextChangedTimer(nullptr)
+    , lastWordsText("")
 
 
 {
@@ -201,6 +225,9 @@ void MainWindow::setupUI()
 
         wordsTextEdit = new QTextEdit(wordsWidget);
         wordsTextEdit->setPlaceholderText("在此处输入单词，每行一个单词");
+        
+        // 设置词库编辑框监控
+        setupWordsTextEditWatcher();
 
         // 创建单词操作按钮
         QHBoxLayout *wordButtonLayout = new QHBoxLayout();
@@ -392,6 +419,8 @@ void MainWindow::setupUI()
         answersLayout->addWidget(backToMainButton, 0, Qt::AlignCenter);
         answersWidget->hide(); // 默认隐藏答案界面
 
+
+
         // 添加所有界面到主布局
         mainLayout->addWidget(homeWidget);
         mainLayout->addWidget(wordsWidget);
@@ -400,11 +429,22 @@ void MainWindow::setupUI()
 
         // 连接主页按钮
         connect(viewWordsButton, &QPushButton::clicked, this, &MainWindow::onViewWords);
-        connect(settingsButton, &QPushButton::clicked, this, &MainWindow::onShowSettings);
         connect(startButton, &QPushButton::clicked, this, &MainWindow::onStartTest);
         connect(themeButton, &QPushButton::clicked, this, &MainWindow::onToggleTheme);
         connect(aboutButton, &QPushButton::clicked, this, &MainWindow::onShowAbout);
         connect(guideButton, &QPushButton::clicked, this, &MainWindow::onShowGuide);
+
+        // 为设置按钮添加右键菜单以支持学习进度功能
+        connect(settingsButton, &QPushButton::clicked, this, &MainWindow::onShowSettings);
+        
+        // 添加右键菜单
+        connect(settingsButton, &QPushButton::customContextMenuRequested, this, [=]() {
+            QMenu *menu = new QMenu(this);
+            menu->addAction("常规设置", this, &MainWindow::onShowSettings);
+            menu->addAction("学习进度可视化", this, &MainWindow::showProgressChart);
+            menu->exec(QCursor::pos());
+        });
+        settingsButton->setContextMenuPolicy(Qt::CustomContextMenu);
 
         // 连接单词界面的按钮
         connect(addWordButton, &QPushButton::clicked, this, &MainWindow::onAddWord);
@@ -761,7 +801,7 @@ void MainWindow::onShowAbout()
     aboutBox.setFont(aboutFont);
     
     aboutBox.setText(
-        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.3</h2>"
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.3.1</h2>"
         "<p style='font-family: Microsoft YaHei;'>一个帮助学习英语的听写练习工具</p>"
         "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，支持 Windows SAPI 和 Flite 语音引擎。</p>"
         "<h3 style='font-family: Microsoft YaHei;'>功能特点：</h3>"
@@ -858,7 +898,15 @@ void MainWindow::onShowGuide()
         "- <strong>SAPI</strong>：Windows内置的语音引擎，无需额外安装<br>"
         "- <strong>Flite</strong>：第三方轻量级语音引擎，独立程序已随软件部署</p>"
 
-        "<h3 style='font-family: Microsoft YaHei;'>7. 注意事项</h3>"
+        "<h3 style='font-family: Microsoft YaHei;'>7. 快捷键说明</h3>"
+        "<p style='font-family: Microsoft YaHei;'>在测试界面中，您可以使用以下快捷键来控制听写过程：</p>"
+        "<ul style='font-family: Microsoft YaHei;'>"
+        "<li><strong>空格键</strong>：重复朗读当前单词</li>"
+        "<li><strong>左方向键</strong>：返回上一个单词</li>"
+        "<li><strong>右方向键</strong>：跳转到下一个单词</li>"
+        "<li><strong>ESC键</strong>：暂停/继续测试</li>"
+        "</ul>"
+        "<h3 style='font-family: Microsoft YaHei;'>8. 注意事项</h3>"
         "<ul style='font-family: Microsoft YaHei;'>"
         "<li>确保系统启用了TTS(text-to-speech)功能</li>"
         "<li>Flite引擎文件已随软件部署，无需额外安装</li>"
@@ -1061,6 +1109,18 @@ void MainWindow::onNextWord()
         } else {
             if (timer) timer->stop();
             startButton->setEnabled(true);
+            
+            // 获取用户对本次测试的自我评估
+            bool ok;
+            int userAssessment = QInputDialog::getInt(this, "测试完成", 
+                QString("本次测试共 %1 个单词，请评估您答对了多少个？").arg(words.size()),
+                words.size(), 0, words.size(), 1, &ok);
+            
+            if (ok) {
+                // 记录测试结果
+                recordTestResult(userAssessment, words.size(), "当前词库");
+            }
+            
             // 测试结束，显示带有"直接返回"和"显示答案"按钮的对话框
             QMessageBox msgBox;
             msgBox.setWindowTitle("提示");
@@ -1958,6 +2018,12 @@ void MainWindow::closeEvent(QCloseEvent *event)
             }
         }
     }
+    
+    // 清理临时文件
+    if (!tempWordlistFile.isEmpty() && QFile::exists(tempWordlistFile)) {
+        QFile::remove(tempWordlistFile);
+        qDebug() << "Temporary wordlist file deleted:" << tempWordlistFile;
+    }
 
     event->accept();
 }
@@ -2216,3 +2282,345 @@ void MainWindow::toggleRandomOrder()
     // 保存设置
     saveSettings();
 }
+
+void MainWindow::keyPressEvent(QKeyEvent *event)
+{
+    // 在测试界面时处理快捷键
+    if (testWidget && testWidget->isVisible()) {
+        switch (event->key()) {
+            case Qt::Key_Space:
+                // 空格键 - 重复朗读当前单词
+                onRepeatWord();
+                break;
+            case Qt::Key_Left:
+                // 左方向键 - 上一个单词
+                onPreviousWord();
+                break;
+            case Qt::Key_Right:
+                // 右方向键 - 下一个单词
+                onNextWordClicked();
+                break;
+            case Qt::Key_Escape:
+                // ESC键 - 暂停/继续测试
+                onPauseResumeTest();
+                break;
+            default:
+                QMainWindow::keyPressEvent(event);
+                break;
+        }
+    }
+    // 如果在其他界面也可以添加相应的快捷键
+    else {
+        QMainWindow::keyPressEvent(event);
+    }
+}
+
+void MainWindow::recordTestResult(int correctCount, int totalWords, const QString& wordListName)
+{
+    TestResult result;
+    result.timestamp = QDateTime::currentDateTime();
+    result.totalWords = totalWords;
+    result.correctCount = correctCount;
+    result.accuracy = totalWords > 0 ? (double)correctCount / totalWords * 100.0 : 0.0;
+    result.wordListName = wordListName;
+    
+    testHistory.push_back(result);
+    
+    // 限制历史记录数量，保留最近的50条记录
+    if (testHistory.size() > 50) {
+        testHistory.erase(testHistory.begin());
+    }
+    
+    // 保存到文件
+    saveTestHistory();
+}
+
+void MainWindow::saveTestHistory()
+{
+    QFile file("test_history.json");
+    if (!file.open(QIODevice::WriteOnly)) {
+        return;
+    }
+    
+    QJsonArray historyArray;
+    for (const auto& result : testHistory) {
+        QJsonObject obj;
+        obj["timestamp"] = result.timestamp.toString(Qt::ISODate);
+        obj["totalWords"] = result.totalWords;
+        obj["correctCount"] = result.correctCount;
+        obj["accuracy"] = result.accuracy;
+        obj["wordListName"] = result.wordListName;
+        historyArray.append(obj);
+    }
+    
+    QJsonDocument doc(historyArray);
+    file.write(doc.toJson());
+}
+
+void MainWindow::loadTestHistory()
+{
+    QFile file("test_history.json");
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if (doc.isArray()) {
+        QJsonArray historyArray = doc.array();
+        testHistory.clear();
+        
+        for (const auto& value : historyArray) {
+            QJsonObject obj = value.toObject();
+            TestResult result;
+            result.timestamp = QDateTime::fromString(obj["timestamp"].toString(), Qt::ISODate);
+            result.totalWords = obj["totalWords"].toInt();
+            result.correctCount = obj["correctCount"].toInt();
+            result.accuracy = obj["accuracy"].toDouble();
+            result.wordListName = obj["wordListName"].toString();
+            testHistory.push_back(result);
+        }
+    }
+}
+
+QWidget* MainWindow::createProgressChartWidget()
+{
+    // 创建图表视图
+    QChart *chart = new QChart();
+    chart->setTitle("学习进度趋势");
+    chart->setTitleFont(QFont("Microsoft YaHei", 12, QFont::Bold));
+    
+    // 创建折线系列 - 准确率
+    QLineSeries *accuracySeries = new QLineSeries();
+    accuracySeries->setName("准确率 (%)");
+    accuracySeries->setColor(QColor(0, 123, 255));
+    
+    // 创建柱状系列 - 正确数量
+    QBarSeries *barSeries = new QBarSeries();
+    barSeries->setName("正确数");
+    
+    // 准备数据
+    QStringList dateTimeLabels;
+    int index = 0;
+    for (const auto& result : testHistory) {
+        QPointF point(index, result.accuracy);
+        accuracySeries->append(point);
+        
+        QBarSet *barSet = new QBarSet(result.timestamp.toString("MM-dd"));
+        *barSet << result.correctCount;
+        barSet->setColor(QColor(40, 167, 69));
+        barSeries->append(barSet);
+        
+        dateTimeLabels << result.timestamp.toString("MM-dd\nhh:mm");
+        index++;
+    }
+    
+    // 添加系列到图表
+    chart->addSeries(accuracySeries);
+    chart->addSeries(barSeries);
+    
+    // 配置X轴
+    QValueAxis *axisX = new QValueAxis();
+    axisX->setTickCount(dateTimeLabels.size());
+    axisX->setRange(0, qMax(1, static_cast<int>(dateTimeLabels.size()) - 1));
+    axisX->setTitleText("测试时间");
+    
+    // 配置Y轴
+    QValueAxis *axisY = new QValueAxis();
+    axisY->setRange(0, 100);
+    axisY->setTitleText("百分比 / 正确数");
+    
+    // 将轴添加到图表
+    chart->addAxis(axisX, Qt::AlignBottom);
+    chart->addAxis(axisY, Qt::AlignLeft);
+    
+    accuracySeries->attachAxis(axisX);
+    accuracySeries->attachAxis(axisY);
+    
+    barSeries->attachAxis(axisX);
+    QValueAxis *barAxisY = new QValueAxis();
+    barAxisY->setRange(0, words.size() > 0 ? words.size() : 20);
+    barAxisY->setTitleText("正确数");
+    chart->addAxis(barAxisY, Qt::AlignRight);
+    barSeries->attachAxis(barAxisY);
+    
+    // 设置图表样式
+    chart->legend()->setVisible(true);
+    chart->legend()->setAlignment(Qt::AlignBottom);
+    
+    // 创建图表视图并返回
+    QChartView *chartView = new QChartView(chart);
+    chartView->setRenderHint(QPainter::Antialiasing);
+    chartView->setMinimumHeight(400);
+    
+    return chartView;
+}
+
+void MainWindow::showProgressChart()
+{
+    // 加载历史记录
+    loadTestHistory();
+    
+    // 创建进度对话框
+    QDialog progressDialog(this);
+    progressDialog.setWindowTitle("学习进度可视化");
+    progressDialog.resize(800, 600);
+    
+    // 创建对话框主布局
+    QVBoxLayout *dialogLayout = new QVBoxLayout(&progressDialog);
+    dialogLayout->setSpacing(10);
+    dialogLayout->setContentsMargins(10, 10, 10, 10);
+    
+    // 创建标题
+    QLabel *titleLabel = new QLabel("学习进度", &progressDialog);
+    QFont titleFont = titleLabel->font();
+    titleFont.setPointSize(16);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    titleLabel->setAlignment(Qt::AlignCenter);
+    
+    // 创建图表
+    QWidget *chartWidget = createProgressChartWidget();
+    
+    // 创建关闭按钮
+    QPushButton *closeButton = new QPushButton("关闭", &progressDialog);
+    QFont buttonFont = closeButton->font();
+    buttonFont.setPointSize(10);
+    closeButton->setFont(buttonFont);
+    closeButton->setMinimumSize(QSize(100, 30));
+    
+    // 连接关闭按钮
+    connect(closeButton, &QPushButton::clicked, &progressDialog, &QDialog::accept);
+    
+    // 将组件添加到布局
+    dialogLayout->addWidget(titleLabel);
+    dialogLayout->addWidget(chartWidget);
+    dialogLayout->addWidget(closeButton, 0, Qt::AlignCenter);
+    
+    // 显示对话框
+    progressDialog.exec();
+}
+
+void MainWindow::setupWordsTextEditWatcher()
+{
+    if (!wordsTextEdit) return;
+    
+    // 创建定时器用于监控文本变化
+    if (!wordsTextChangedTimer) {
+        wordsTextChangedTimer = new QTimer(this);
+        wordsTextChangedTimer->setSingleShot(true);
+        connect(wordsTextChangedTimer, &QTimer::timeout, this, &MainWindow::syncWordsTextEditToTempFile);
+    }
+    
+    // 连接文本变化信号
+    connect(wordsTextEdit, &QTextEdit::textChanged, this, [=]() {
+        // 每次文本变化时重启定时器（防抖）
+        if (wordsTextChangedTimer) {
+            wordsTextChangedTimer->stop();
+            wordsTextChangedTimer->start(500); // 500ms延迟，避免频繁保存
+        }
+    });
+    
+    // 初始化时加载临时文件内容
+    if (QFile::exists(tempWordlistFile)) {
+        QFile file(tempWordlistFile);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QString content = file.readAll();
+            wordsTextEdit->setPlainText(content);
+            lastWordsText = content;
+        }
+    }
+}
+
+void MainWindow::syncWordsTextEditToTempFile()
+{
+    if (!wordsTextEdit) return;
+    
+    QString currentText = wordsTextEdit->toPlainText();
+    
+    // 检查内容是否真的发生了变化
+    if (currentText == lastWordsText) return;
+    
+    // 更新lastWordsText
+    lastWordsText = currentText;
+    
+    // 如果文本为空，则不创建临时文件或删除已有的临时文件
+    if (currentText.trimmed().isEmpty()) {
+        if (QFile::exists(tempWordlistFile)) {
+            QFile::remove(tempWordlistFile);
+        }
+        return;
+    }
+    
+    // 创建临时词库文件路径（如果不存在）
+    if (tempWordlistFile.isEmpty()) {
+        createTempWordlist();
+    }
+    
+    // 保存到临时文件
+    QFile file(tempWordlistFile);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qDebug() << "Could not create temporary file:" << tempWordlistFile << "Error:" << file.errorString();
+        return;
+    }
+    
+    QTextStream out(&file);
+    out << currentText;
+    file.close();
+    
+    // 同时更新words向量，以便可以直接开始听写
+    updateWordsFromTextEdit();
+}
+
+void MainWindow::updateWordsFromTextEdit()
+{
+    if (!wordsTextEdit) return;
+    
+    QString text = wordsTextEdit->toPlainText();
+    QStringList lines = text.split('\n', Qt::SkipEmptyParts);
+    
+    words.clear();
+    cachedWords.clear();
+    
+    for (const QString& line : lines) {
+        QString trimmedLine = line.trimmed();
+        if (!trimmedLine.isEmpty()) {
+            words.push_back(trimmedLine.toStdString());
+            cachedWords.push_back(trimmedLine.toStdString());
+        }
+    }
+}
+
+void MainWindow::cleanupTempFiles()
+{
+    if (!tempWordlistFile.isEmpty() && QFile::exists(tempWordlistFile)) {
+        QFile::remove(tempWordlistFile);
+        qDebug() << "Temporary wordlist file deleted:" << tempWordlistFile;
+    }
+}
+
+void MainWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    
+    // 如果在单词界面显示时，启动监控
+    if (wordsWidget && wordsWidget->isVisible()) {
+        if (wordsTextChangedTimer && !wordsTextChangedTimer->isActive()) {
+            // 立即同步一次，确保界面和数据一致
+            syncWordsTextEditToTempFile();
+        }
+    }
+}
+
+void MainWindow::hideEvent(QHideEvent *event)
+{
+    // 如果隐藏的是单词界面，停止监控
+    if (wordsWidget && wordsWidget->isVisible()) {
+        if (wordsTextChangedTimer) {
+            wordsTextChangedTimer->stop();
+        }
+    }
+    
+    QMainWindow::hideEvent(event);
+}
+
+

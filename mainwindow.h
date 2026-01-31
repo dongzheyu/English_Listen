@@ -43,6 +43,10 @@
 #include <QCheckBox>
 #include <QGroupBox>
 #include <QSpinBox>
+#include <QShortcut>
+#include <QKeySequence>
+#include <QDateTime>
+#include <QMap>
 #include <cmath>
 #include <windows.h>
 #include <vector>
@@ -70,6 +74,7 @@ public:
 protected:
     void resizeEvent(QResizeEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
 private slots:
     void onStartTest();
@@ -184,6 +189,16 @@ private:
     void loadFromTempWordlist(); // 从临时词库加载
     bool testFliteEngine(); // 测试Flite引擎是否正常工作
     
+    // 学习进度相关
+    struct TestResult {
+        QDateTime timestamp;
+        int totalWords;
+        int correctCount;
+        double accuracy;
+        QString wordListName;
+    };
+    std::vector<TestResult> testHistory;
+    
     // 网络下载相关方法
     void downloadFlite();
     bool checkFliteExecutable();
@@ -194,6 +209,29 @@ private:
     
     // 随机播放相关函数
     void toggleRandomOrder();
+    
+    // 学习进度相关函数
+    void recordTestResult(int correctCount, int totalWords, const QString& wordListName);
+    void showProgressChart();
+    void saveTestHistory();
+    void loadTestHistory();
+    QWidget* createProgressChartWidget();
+    
+
+    
+    // 临时词库相关
+    QTimer *wordsTextChangedTimer;  // 监控词库编辑变化的定时器
+    QString lastWordsText;          // 记录上次词库文本内容
+    
+    // 临时词库管理函数
+    void setupWordsTextEditWatcher();  // 设置词库编辑监控
+    void syncWordsTextEditToTempFile(); // 同步词库编辑到临时文件
+    void cleanupTempFiles();           // 清理临时文件
+    void updateWordsFromTextEdit();    // 从文本框更新words向量
+    
+    // 重写的事件处理器
+    void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
 };
 
 #endif // MAINWINDOW_H

@@ -43,6 +43,11 @@ English Listen 是一款专为英语学习者设计的智能听写软件。它�
 - 无需网络，离线也可使用
 - 支持 Flite 引擎自动下载
 
+### ✏️ 智能听写模式
+- 纸笔听写模式：传统的听写练习方式
+- 在线听写模式：先听写后统一提交答案，实时核对结果
+- 用户可以边听边输入听到的单词，最后统一查看结果
+
 ## 🚀 快速上手指南
 
 ### 图形界面版使用流程：
@@ -52,18 +57,11 @@ English Listen 是一款专为英语学习者设计的智能听写软件。它�
 4. **核对答案**：测试结束后可查看标准答案
 5. **反复练习**：针对错误单词进行重点训练
 
-### 命令行版使用流程：
-1. 运行程序，根据提示输入单词列表
-2. 开始听写训练
-3. 跟随语音书写单词
-4. 完成后对照检查
-
 ## 🛠 技术亮点
 
 - **现代化架构**：基于 C++17 和 Qt6 构建
 - **跨平台兼容**：完美适配 Windows 系统
 - **零依赖运行**：内置所有必需组件
-- **安全可靠**：通过数字签名确保软件安全，详见 [安全政策](SECURITY.md)
 - **开源协议**：采用 MIT 许可证，自由使用
 
 ## 📄 快捷键说明
@@ -78,8 +76,8 @@ English Listen 是一款专为英语学习者设计的智能听写软件。它�
 更多详细信息请参见 [快捷键使用说明](SHORTCUTS.md)。
 
 ## 📄 更新日志
-
 查看我们的 [更新记录](update.md) 了解最新功能和改进。
+
 
 ## 👨‍💻 开发者信息
 
@@ -88,38 +86,6 @@ English Listen 是一款专为英语学习者设计的智能听写软件。它�
 ## 📄 许可协议
 
 本软件采用 MIT 许可证发布，详情请参阅 LICENSE 文件。
-
-## 🔧 静态编译说明
-
-为了方便部署，本项目支持静态编译，生成的可执行文件可以在没有安装Qt和C++运行时库的计算机上独立运行。
-
-### 静态编译配置
-
-在CMakeLists.txt中已配置静态编译选项，主要参数包括：
-- 使用 `-DCMAKE_BUILD_TYPE=Release`
-- 设置 `-DCMAKE_PREFIX_PATH="D:/msys64/mingw64/qt6-static"`
-- 设置 `-DCMAKE_FIND_LIBRARY_SUFFIXES=".a"`
-- 设置 `-DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++"`
-- 启用 `-DQT_STATICPLUGIN=ON` 和 `-DQT_STATIC_RUNTIME=ON`
-
-### 静态编译命令
-
-```bash
-mkdir build-static
-cd build-static
-cmake .. -G "MinGW Makefiles" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_PREFIX_PATH="D:/msys64/mingw64/qt6-static" \
-    -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++" \
-    -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
-    -DQT_STATICPLUGIN=ON \
-    -DQT_STATIC_RUNTIME=ON
-mingw32-make -j4
-```
-
-### 部署
-
-静态编译后的可执行文件是独立的，无需额外的DLL文件即可在Windows系统上运行。
 
 ---
 *让英语学习变得更简单、更有趣！*

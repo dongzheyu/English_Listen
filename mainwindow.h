@@ -29,6 +29,10 @@
 #include <QDateTime>
 #include <QPropertyAnimation>
 #include <QGraphicsOpacityEffect>
+#include <QGraphicsDropShadowEffect>
+#include <QParallelAnimationGroup>
+#include <QSequentialAnimationGroup>
+#include <QEasingCurve>
 #include <QResizeEvent>
 #include <QInputDialog>
 #include <QSettings>
@@ -36,6 +40,7 @@
 #include <QRegularExpression>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFormLayout>
 #include <QDirIterator>
 #include <QProgressDialog>
 #include <QStyleHints>
@@ -59,6 +64,59 @@
 #include <QNetworkReply>
 #include <QUrl>
 
+// 用户账户系统相关头文件
+#include <QCryptographicHash>
+#include <QStandardPaths>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QByteArray>
+#include <QDataStream>
+#include <QRandomGenerator>
+
+
+
+// 学习结果结构体
+struct TestResult {
+    QDateTime timestamp;
+    int totalWords;
+    int correctCount;
+    double accuracy;
+    QString wordListName;
+};
+
+// 用户数据结构
+struct UserData {
+    QString username;
+    QString nickname;
+    QDateTime createdTime;
+    QDateTime lastLoginTime;
+    bool isActive;
+    
+    // 学习相关数据
+    QStringList wordLists;
+    std::vector<TestResult> testHistory;
+    int totalStudyTime;  // 总学习时间（分钟）
+    int completedTests;  // 完成测试次数
+    
+    // 设置偏好
+    bool isDarkTheme;
+    int readInterval;
+    int speechEngine;
+    bool isRandomOrder;
+    
+    // 隐私设置
+    bool allowDataCollection;     // 是否允许数据收集
+    bool allowCloudSync;          // 是否允许云同步
+    bool allowAnalytics;          // 是否允许数据分析
+    bool shareLearningStats;      // 是否分享学习统计数据
+    
+    UserData() : isActive(true), totalStudyTime(0), completedTests(0), 
+                 isDarkTheme(false), readInterval(5), speechEngine(0), isRandomOrder(false),
+                 allowDataCollection(false), allowCloudSync(false), 
+                 allowAnalytics(false), shareLearningStats(false) {}
+};
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -75,6 +133,7 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void onStartTest();
@@ -95,6 +154,7 @@ private slots:
     void onShowAbout();        // 新增：显示关于界面
     void onShowGuide();        // 新增：显示指南界面
     void onUpdateWelcomeAnimation(); // 新增：更新欢迎语动画
+    void onSelectDictationMode(); // 新增：选择听写模式
     
     // 网络下载相关槽函数
     void onDownloadFinished(QNetworkReply* reply);
@@ -109,6 +169,7 @@ private:
     QHBoxLayout *bottomLayout;
     
     QLabel *welcomeLabel;           // 新增：动态欢迎语
+    QLabel *userStatusLabel;        // 用户状态标签
     QPushButton *viewWordsButton;   // 新增：查看单词按钮
     QPushButton *settingsButton;    // 恢复：设置按钮
     QPushButton *startButton;
@@ -119,6 +180,21 @@ private:
     QTimer *welcomeTimer;
     int welcomeAnimationStep;
     QStringList welcomeMessages;
+    
+    // 界面切换动画相关
+    QParallelAnimationGroup *fadeInOutGroup;
+    QGraphicsOpacityEffect *homeOpacityEffect;
+    QGraphicsOpacityEffect *wordsOpacityEffect;
+    QGraphicsOpacityEffect *testOpacityEffect;
+    QGraphicsOpacityEffect *answersOpacityEffect;
+    
+
+    
+    // 加载动画相关
+    QLabel *loadingLabel;
+    QTimer *loadingTimer;
+    int loadingAnimationStep;
+    QPropertyAnimation *loadingRotationAnim;
     
     // 单词页面控件
     QWidget *wordsWidget;
@@ -190,13 +266,6 @@ private:
     bool testFliteEngine(); // 测试Flite引擎是否正常工作
     
     // 学习进度相关
-    struct TestResult {
-        QDateTime timestamp;
-        int totalWords;
-        int correctCount;
-        double accuracy;
-        QString wordListName;
-    };
     std::vector<TestResult> testHistory;
     
     // 网络下载相关方法
@@ -229,9 +298,74 @@ private:
     void cleanupTempFiles();           // 清理临时文件
     void updateWordsFromTextEdit();    // 从文本框更新words向量
     
+    // 动画相关函数
+    void setupInterfaceAnimations();   // 设置界面动画效果
+    void animateInterfaceSwitch(QWidget *fromWidget, QWidget *toWidget); // 界面切换动画
+    
+    // 加载动画函数
+    void showLoadingAnimation(const QString &message = "加载中...");
+    void hideLoadingAnimation();
+    void updateLoadingAnimation();
+    
     // 重写的事件处理器
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
+    
+    // 在线听写相关
+    bool isOnlineDictationMode; // 是否在线听写模式
+    QLineEdit *onlineInputLineEdit; // 在线听写输入框
+    QPushButton *submitAnswerButton; // 提交答案按钮
+    QPushButton *nextWordButton;     // 下一个单词按钮
+    QLabel *onlineStatusLabel; // 在线听写状态标签
+    std::vector<std::string> originalWordsOrder; // 保存原始单词顺序
+    std::vector<QString> userInputs; // 用户输入缓存
+    
+    // 用户账户系统相关
+    QString currentUser;  // 当前登录用户
+    QMap<QString, UserData> userProfiles;  // 用户配置映射
+    QString userDataPath;  // 用户数据存储路径
+    bool encryptionEnabled;  // 是否启用数据加密
+    
+    void setupOnlineDictation(); // 设置在线听写界面
+    void startOnlineDictation(); // 开始在线听写
+    void startPaperDictation();  // 开始纸笔听写
+    void checkOnlineAnswer();    // 检查在线听写答案
+    void showNextWordOnline();   // 显示下一个单词（在线模式）
+    void submitAllAnswers();     // 提交所有答案
+    std::vector<std::string> getWords(); // 获取当前单词列表
+    
+    // 用户账户系统函数
+    void initializeUserSystem();  // 初始化用户系统
+    void createUser(const QString& username, const QString& nickname = "");
+    bool loginUser(const QString& username);
+    void logoutUser();
+    void saveUserProfile(const QString& username);
+    void loadUserProfile(const QString& username);
+    void saveAllUserProfiles();
+    void loadAllUserProfiles();
+    QString hashPassword(const QString& password);
+    bool validateUsername(const QString& username);
+    void updateCurrentUserProfile();
+    
+    // 数据加密相关函数
+    QByteArray generateEncryptionKey();
+    QByteArray encryptData(const QByteArray& data, const QByteArray& key);
+    QByteArray decryptData(const QByteArray& encryptedData, const QByteArray& key);
+    QString encryptString(const QString& plaintext);
+    QString decryptString(const QString& ciphertext);
+    void saveEncryptedUserProfile(const QString& username);
+    void loadEncryptedUserProfile(const QString& username);
+    
+    // 用户界面相关函数
+    void showUserLoginDialog();
+    void showUserProfileDialog();
+    void updateUserMenu();
+    void onUserMenuTriggered();
+    
+    // 隐私设置相关函数
+    void showPrivacySettingsDialog();
+    void loadPrivacySettings();
+    void savePrivacySettings();
 };
 
 #endif // MAINWINDOW_H

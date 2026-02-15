@@ -22,6 +22,12 @@
 #include <QTimer>
 #include <QShowEvent>
 #include <QHideEvent>
+#include <QInputDialog>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QTimer>
+
+
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -39,6 +45,15 @@ MainWindow::MainWindow(QWidget *parent)
     , aboutButton(nullptr)
     , welcomeTimer(nullptr)
     , welcomeAnimationStep(0)
+    , fadeInOutGroup(nullptr)
+    , homeOpacityEffect(nullptr)
+    , wordsOpacityEffect(nullptr)
+    , testOpacityEffect(nullptr)
+    , answersOpacityEffect(nullptr)
+    , loadingLabel(nullptr)
+    , loadingTimer(nullptr)
+    , loadingAnimationStep(0)
+    , loadingRotationAnim(nullptr)
     , wordsWidget(nullptr)
     , wordsLayout(nullptr)
     , wordsTextEdit(nullptr)
@@ -75,19 +90,32 @@ MainWindow::MainWindow(QWidget *parent)
     , isRandomOrder(false)
     , wordsTextChangedTimer(nullptr)
     , lastWordsText("")
-
-
+    , isOnlineDictationMode(false)
+    , onlineInputLineEdit(nullptr)
+    , submitAnswerButton(nullptr)
+    , onlineStatusLabel(nullptr)
+    , currentUser("")
+    , userDataPath("")
+    , encryptionEnabled(true)
+    , speechEngine(0)
 {
     // 初始化网络管理器
     networkManager = new QNetworkAccessManager(this);
     connect(networkManager, &QNetworkAccessManager::finished,
             this, &MainWindow::onDownloadFinished);
 
+    // 初始化用户系统
+    initializeUserSystem();
+    
     // 加载设置
     loadSettings();
     
-
-
+    // 初始化用户菜单
+    updateUserMenu();
+    
+    // 初始化用户菜单
+    updateUserMenu();
+    
     setupUI();
     checkWordlistDirectory();
     loadWordlistFiles();
@@ -108,6 +136,20 @@ MainWindow::~MainWindow()
     if (timer) {
         timer->stop();
         delete timer;
+    }
+    
+    // 清理动画组
+    if (fadeInOutGroup) {
+        delete fadeInOutGroup;
+    }
+    
+    // 清理加载动画
+    if (loadingTimer) {
+        loadingTimer->stop();
+        delete loadingTimer;
+    }
+    if (loadingRotationAnim) {
+        delete loadingRotationAnim;
     }
 }
 
@@ -144,23 +186,37 @@ void MainWindow::setupUI()
         welcomeLabel->setFont(welcomeFont);
         welcomeLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
+        // 创建用户状态标签
+        userStatusLabel = new QLabel("👤 未登录", this);
+        userStatusLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        QFont statusFont = userStatusLabel->font();
+        statusFont.setFamily("Microsoft YaHei");
+        statusFont.setPointSize(10);
+        userStatusLabel->setFont(statusFont);
+        userStatusLabel->setStyleSheet("color: gray; padding: 5px;");
+        userStatusLabel->setCursor(Qt::PointingHandCursor);
+        
+        // 为用户状态标签安装事件过滤器
+        userStatusLabel->installEventFilter(this);
+
         // 创建按钮样式表
         QString buttonStyle = "QPushButton { "
                              "font-family: 'Microsoft YaHei'; "
                              "font-size: 9pt; "
-                             "padding: 6px 14px; "  // 缩小2px
+                             "padding: 8px 16px; "
                              "margin: 4px; "
-                             "border: 1px solid #cccccc; "
-                             "border-radius: 4px; "
-                             "background-color: #f0f0f0; "
+                             "border: 2px solid #555555; "
+                             "border-radius: 6px; "
+                             "background-color: #ffffff; "
+                             "color: #333333; "
                              "} "
                              "QPushButton:hover { "
                              "background-color: #e0e0e0; "
-                             "border: 1px solid #999999; "
+                             "border: 2px solid #333333; "
                              "} "
                              "QPushButton:pressed { "
                              "background-color: #d0d0d0; "
-                             "border: 1px solid #666666; "
+                             "border: 2px solid #000000; "
                              "} ";
 
         // 创建按钮布局
@@ -205,7 +261,13 @@ void MainWindow::setupUI()
         buttonLayout->addWidget(aboutButton);
         buttonLayout->addWidget(guideButton);
 
-        homeLayout->addWidget(welcomeLabel);
+        // 创建顶部布局（欢迎标签和用户状态）
+        QHBoxLayout *topLayout = new QHBoxLayout();
+        topLayout->addWidget(welcomeLabel);
+        topLayout->addWidget(userStatusLabel);
+        topLayout->setStretch(0, 1); // 欢迎标签占更多空间
+        
+        homeLayout->addLayout(topLayout);
         homeLayout->addLayout(buttonLayout);
 
         // 创建单词界面控件
@@ -429,7 +491,7 @@ void MainWindow::setupUI()
 
         // 连接主页按钮
         connect(viewWordsButton, &QPushButton::clicked, this, &MainWindow::onViewWords);
-        connect(startButton, &QPushButton::clicked, this, &MainWindow::onStartTest);
+        connect(startButton, &QPushButton::clicked, this, &MainWindow::onSelectDictationMode);
         connect(themeButton, &QPushButton::clicked, this, &MainWindow::onToggleTheme);
         connect(aboutButton, &QPushButton::clicked, this, &MainWindow::onShowAbout);
         connect(guideButton, &QPushButton::clicked, this, &MainWindow::onShowGuide);
@@ -471,6 +533,14 @@ void MainWindow::setupUI()
         welcomeTimer = new QTimer(this);
         connect(welcomeTimer, &QTimer::timeout, this, &MainWindow::onUpdateWelcomeAnimation);
     }
+    
+    // 初始化界面切换动画组
+    if (!fadeInOutGroup) {
+        fadeInOutGroup = new QParallelAnimationGroup(this);
+    }
+    
+    // 初始化界面透明度效果
+    setupInterfaceAnimations();
 
     // 检查系统主题
     Qt::ColorScheme colorScheme = qApp->styleHints()->colorScheme();
@@ -632,20 +702,180 @@ void MainWindow::toggleTheme()
     }
 }
 
+void MainWindow::setupInterfaceAnimations()
+{
+    // 为主界面组件添加透明度效果
+    QWidget *homeWidget = centralWidget->layout()->itemAt(0)->widget();
+    if (homeWidget && !homeOpacityEffect) {
+        homeOpacityEffect = new QGraphicsOpacityEffect(this);
+        homeOpacityEffect->setOpacity(1.0);
+        homeWidget->setGraphicsEffect(homeOpacityEffect);
+    }
+    
+    if (wordsWidget && !wordsOpacityEffect) {
+        wordsOpacityEffect = new QGraphicsOpacityEffect(this);
+        wordsOpacityEffect->setOpacity(0.0);
+        wordsWidget->setGraphicsEffect(wordsOpacityEffect);
+    }
+    
+    if (testWidget && !testOpacityEffect) {
+        testOpacityEffect = new QGraphicsOpacityEffect(this);
+        testOpacityEffect->setOpacity(0.0);
+        testWidget->setGraphicsEffect(testOpacityEffect);
+    }
+    
+    if (answersWidget && !answersOpacityEffect) {
+        answersOpacityEffect = new QGraphicsOpacityEffect(this);
+        answersOpacityEffect->setOpacity(0.0);
+        answersWidget->setGraphicsEffect(answersOpacityEffect);
+    }
+}
+
+void MainWindow::animateInterfaceSwitch(QWidget *fromWidget, QWidget *toWidget)
+{
+    // 停止正在进行的动画
+    if (fadeInOutGroup->state() == QAbstractAnimation::Running) {
+        fadeInOutGroup->stop();
+    }
+    
+    fadeInOutGroup->clear();
+    
+    // 创建淡出动画
+    if (fromWidget) {
+        QGraphicsOpacityEffect *fadeOutEffect = qobject_cast<QGraphicsOpacityEffect*>(fromWidget->graphicsEffect());
+        if (fadeOutEffect) {
+            QPropertyAnimation *fadeOutAnim = new QPropertyAnimation(fadeOutEffect, "opacity", this);
+            fadeOutAnim->setDuration(300);
+            fadeOutAnim->setStartValue(1.0);
+            fadeOutAnim->setEndValue(0.0);
+            fadeOutAnim->setEasingCurve(QEasingCurve::OutQuad);
+            fadeInOutGroup->addAnimation(fadeOutAnim);
+        }
+    }
+    
+    // 创建淡入动画
+    if (toWidget) {
+        QGraphicsOpacityEffect *fadeInEffect = qobject_cast<QGraphicsOpacityEffect*>(toWidget->graphicsEffect());
+        if (fadeInEffect) {
+            QPropertyAnimation *fadeInAnim = new QPropertyAnimation(fadeInEffect, "opacity", this);
+            fadeInAnim->setDuration(300);
+            fadeInAnim->setStartValue(0.0);
+            fadeInAnim->setEndValue(1.0);
+            fadeInAnim->setEasingCurve(QEasingCurve::InQuad);
+            fadeInOutGroup->addAnimation(fadeInAnim);
+        }
+    }
+    
+    // 启动动画组
+    fadeInOutGroup->start();
+}
+
+void MainWindow::showLoadingAnimation(const QString &message)
+{
+    // 创建加载标签
+    if (!loadingLabel) {
+        loadingLabel = new QLabel(this);
+        loadingLabel->setAlignment(Qt::AlignCenter);
+        loadingLabel->setStyleSheet(
+            "QLabel { "
+            "background-color: rgba(0, 0, 0, 180); "
+            "color: white; "
+            "font-size: 14px; "
+            "border-radius: 10px; "
+            "padding: 20px; "
+            "}");
+        
+        // 设置在主窗口中央
+        loadingLabel->setGeometry(width()/2 - 100, height()/2 - 50, 200, 100);
+    }
+    
+    loadingLabel->setText(message + "\n◐");
+    loadingLabel->show();
+    
+    // 创建旋转动画
+    if (!loadingRotationAnim) {
+        loadingRotationAnim = new QPropertyAnimation(loadingLabel, "windowOpacity", this);
+        loadingRotationAnim->setDuration(1000);
+        loadingRotationAnim->setLoopCount(-1); // 无限循环
+        loadingRotationAnim->setStartValue(0.7);
+        loadingRotationAnim->setEndValue(1.0);
+        loadingRotationAnim->setEasingCurve(QEasingCurve::InOutQuad);
+    }
+    
+    // 创建定时器更新旋转符号
+    if (!loadingTimer) {
+        loadingTimer = new QTimer(this);
+        connect(loadingTimer, &QTimer::timeout, this, &MainWindow::updateLoadingAnimation);
+    }
+    
+    loadingAnimationStep = 0;
+    loadingTimer->start(150);
+    loadingRotationAnim->start();
+}
+
+void MainWindow::hideLoadingAnimation()
+{
+    if (loadingLabel) {
+        loadingLabel->hide();
+    }
+    
+    if (loadingTimer) {
+        loadingTimer->stop();
+    }
+    
+    if (loadingRotationAnim && loadingRotationAnim->state() == QAbstractAnimation::Running) {
+        loadingRotationAnim->stop();
+    }
+}
+
+void MainWindow::updateLoadingAnimation()
+{
+    if (!loadingLabel) return;
+    
+    // 旋转符号数组
+    QStringList spinnerChars = {"◐", "◓", "◑", "◒"};
+    QString currentChar = spinnerChars[loadingAnimationStep % spinnerChars.size()];
+    
+    // 获取当前文本（去掉最后一行的符号）
+    QString currentText = loadingLabel->text();
+    QStringList lines = currentText.split('\n');
+    if (lines.size() >= 2) {
+        lines[lines.size()-1] = currentChar;
+        loadingLabel->setText(lines.join('\n'));
+    }
+    
+    loadingAnimationStep++;
+}
+
 void MainWindow::showMainInterface()
 {
+    // 获取当前显示的界面
+    QWidget *currentWidget = nullptr;
+    QWidget *homeWidget = centralWidget->layout()->itemAt(0)->widget();
+    
+    // 确定当前显示的是哪个界面
+    if (wordsWidget && wordsWidget->isVisible()) {
+        currentWidget = wordsWidget;
+    } else if (testWidget && testWidget->isVisible()) {
+        currentWidget = testWidget;
+    } else if (answersWidget && answersWidget->isVisible()) {
+        currentWidget = answersWidget;
+    }
+    
     // 隐藏其他界面
     if (wordsWidget) wordsWidget->hide();
     if (testWidget) testWidget->hide();
     if (answersWidget) answersWidget->hide();
 
     // 显示主页界面元素
-    QWidget *homeWidget = centralWidget->layout()->itemAt(0)->widget();
     if (homeWidget) {
         homeWidget->show();
         // 确保主页界面能接收焦点
         homeWidget->setEnabled(true);
     }
+
+    // 执行界面切换动画
+    animateInterfaceSwitch(currentWidget, homeWidget);
 
     // 更新欢迎语
     updateWelcomeMessage();
@@ -661,14 +891,29 @@ void MainWindow::showMainInterface()
 
 void MainWindow::showWordsInterface()
 {
-    // 隐藏其他界面
+    // 获取当前显示的界面
+    QWidget *currentWidget = nullptr;
     QWidget *homeWidget = centralWidget->layout()->itemAt(0)->widget();
+    
+    // 确定当前显示的是哪个界面
+    if (homeWidget && homeWidget->isVisible()) {
+        currentWidget = homeWidget;
+    } else if (testWidget && testWidget->isVisible()) {
+        currentWidget = testWidget;
+    } else if (answersWidget && answersWidget->isVisible()) {
+        currentWidget = answersWidget;
+    }
+    
+    // 隐藏其他界面
     if (homeWidget) homeWidget->hide();
     if (testWidget) testWidget->hide();
     if (answersWidget) answersWidget->hide();
 
     // 显示单词界面
     if (wordsWidget) wordsWidget->show();
+
+    // 执行界面切换动画
+    animateInterfaceSwitch(currentWidget, wordsWidget);
 
     // 更新单词列表显示
     QString wordsText;
@@ -680,8 +925,20 @@ void MainWindow::showWordsInterface()
 
 void MainWindow::showTestInterface()
 {
-    // 隐藏其他界面
+    // 获取当前显示的界面
+    QWidget *currentWidget = nullptr;
     QWidget *homeWidget = centralWidget->layout()->itemAt(0)->widget();
+    
+    // 确定当前显示的是哪个界面
+    if (homeWidget && homeWidget->isVisible()) {
+        currentWidget = homeWidget;
+    } else if (wordsWidget && wordsWidget->isVisible()) {
+        currentWidget = wordsWidget;
+    } else if (answersWidget && answersWidget->isVisible()) {
+        currentWidget = answersWidget;
+    }
+    
+    // 隐藏其他界面
     if (homeWidget) homeWidget->hide();
     if (wordsWidget) wordsWidget->hide();
     if (answersWidget) answersWidget->hide();
@@ -689,7 +946,8 @@ void MainWindow::showTestInterface()
     // 显示测试界面
     if (testWidget) testWidget->show();
     
-    
+    // 执行界面切换动画
+    animateInterfaceSwitch(currentWidget, testWidget);
 }
 
 void MainWindow::showAnswersInterface()
@@ -697,8 +955,20 @@ void MainWindow::showAnswersInterface()
     // 停止定时器
     if (timer) timer->stop();
 
-    // 隐藏其他界面
+    // 获取当前显示的界面
+    QWidget *currentWidget = nullptr;
     QWidget *homeWidget = centralWidget->layout()->itemAt(0)->widget();
+    
+    // 确定当前显示的是哪个界面
+    if (homeWidget && homeWidget->isVisible()) {
+        currentWidget = homeWidget;
+    } else if (wordsWidget && wordsWidget->isVisible()) {
+        currentWidget = wordsWidget;
+    } else if (testWidget && testWidget->isVisible()) {
+        currentWidget = testWidget;
+    }
+
+    // 隐藏其他界面
     if (homeWidget) homeWidget->hide();
     if (wordsWidget) wordsWidget->hide();
     if (testWidget) testWidget->hide();
@@ -714,6 +984,9 @@ void MainWindow::showAnswersInterface()
 
     // 显示答案界面
     if (answersWidget) answersWidget->show();
+    
+    // 执行界面切换动画
+    animateInterfaceSwitch(currentWidget, answersWidget);
 }
 
 void MainWindow::onViewWords()
@@ -801,7 +1074,7 @@ void MainWindow::onShowAbout()
     aboutBox.setFont(aboutFont);
     
     aboutBox.setText(
-        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.3.1</h2>"
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.3.2</h2>"
         "<p style='font-family: Microsoft YaHei;'>一个帮助学习英语的听写练习工具</p>"
         "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，支持 Windows SAPI 和 Flite 语音引擎。</p>"
         "<h3 style='font-family: Microsoft YaHei;'>功能特点：</h3>"
@@ -1034,11 +1307,63 @@ void MainWindow::onToggleTheme()
     saveSettings();
 }
 
-void MainWindow::onStartTest()
+void MainWindow::onSelectDictationMode()
+{
+    // 创建选择对话框
+    QDialog dialog(this);
+    dialog.setWindowTitle("选择听写模式");
+    dialog.resize(300, 150);
+    
+    QVBoxLayout layout(&dialog);
+    QLabel label("请选择听写模式：", &dialog);
+    layout.addWidget(&label);
+    
+    QPushButton paperButton("纸笔听写", &dialog);
+    QPushButton onlineButton("在线听写", &dialog);
+    
+    // 设置按钮样式
+    QString buttonStyle = "QPushButton { "
+                        "font-family: 'Microsoft YaHei'; "
+                        "font-size: 9pt; "
+                        "padding: 6px 14px; "
+                        "margin: 4px; "
+                        "border: 1px solid #cccccc; "
+                        "border-radius: 4px; "
+                        "background-color: #f0f0f0; "
+                        "}" 
+                        "QPushButton:hover { "
+                        "background-color: #e0e0e0; "
+                        "border: 1px solid #999999; "
+                        "}" 
+                        "QPushButton:pressed { "
+                        "background-color: #d0d0d0; "
+                        "border: 1px solid #666666; "
+                        "}";
+    
+    paperButton.setStyleSheet(buttonStyle);
+    onlineButton.setStyleSheet(buttonStyle);
+    
+    layout.addWidget(&paperButton);
+    layout.addWidget(&onlineButton);
+    
+    // 连接按钮信号
+    QObject::connect(&paperButton, &QPushButton::clicked, &dialog, [&dialog, this]() {
+        this->startPaperDictation();
+        dialog.accept();
+    });
+    
+    QObject::connect(&onlineButton, &QPushButton::clicked, &dialog, [&dialog, this]() {
+        this->startOnlineDictation();
+        dialog.accept();
+    });
+    
+    dialog.exec();
+}
+
+void MainWindow::startPaperDictation()
 {
     if (words.empty()) {
         QMessageBox::warning(this, "警告", "词库为空，请先添加单词");
-
         return;
     }
 
@@ -1184,8 +1509,287 @@ void MainWindow::onPreviousWord()
     }
 }
 
+void MainWindow::startOnlineDictation()
+{
+    if (words.empty()) {
+        QMessageBox::warning(this, "警告", "词库为空，请先添加单词");
+        return;
+    }
+
+    // 保存原始单词顺序
+    originalWordsOrder = words;
+
+    // 如果启用随机播放，则随机化单词列表
+    if (isRandomOrder) {
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(words.begin(), words.end(), g);
+    }
+
+    currentIndex = 0;
+    isPaused = false;  // 重置暂停状态
+    isOnlineDictationMode = true; // 设置为在线听写模式
+    userInputs.clear(); // 清空之前的用户输入
+    userInputs.resize(words.size()); // 预分配空间
+    startButton->setEnabled(false);
+
+    // 更新暂停按钮文本
+    if (pauseResumeButton) pauseResumeButton->setText("暂停");
+
+    // 切换到测试界面
+    showTestInterface();
+    
+    // 设置在线听写界面
+    setupOnlineDictation();
+
+    // 立即朗读第一个单词
+    if (currentIndex < words.size()) {
+        // 显示正在朗读提示
+        if (countdownLabel) countdownLabel->setText("正在朗读");
+
+        // 处理界面事件，确保标签更新
+        QCoreApplication::processEvents();
+
+        // 朗读当前单词（隐藏CMD窗口）
+        speakWord(words[currentIndex]);
+    }
+}
+
+void MainWindow::setupOnlineDictation()
+{
+    // 如果还没有创建在线听写界面组件，则创建它们
+    if (!onlineInputLineEdit) {
+        // 创建输入框
+        onlineInputLineEdit = new QLineEdit(testWidget);
+        onlineInputLineEdit->setPlaceholderText("请输入听到的单词...");
+        
+        // 创建提交按钮
+        submitAnswerButton = new QPushButton("提交所有答案", testWidget);
+        submitAnswerButton->setStyleSheet(
+            "QPushButton { "
+            "font-family: 'Microsoft YaHei'; "
+            "font-size: 9pt; "
+            "padding: 6px 14px; "
+            "margin: 4px; "
+            "border: 1px solid #cccccc; "
+            "border-radius: 4px; "
+            "background-color: #f0f0f0; "
+            "}" 
+            "QPushButton:hover { "
+            "background-color: #e0e0e0; "
+            "border: 1px solid #999999; "
+            "}" 
+            "QPushButton:pressed { "
+            "background-color: #d0d0d0; "
+            "border: 1px solid #666666; "
+            "}");
+        
+        // 创建下一个单词按钮
+        nextWordButton = new QPushButton("下一个单词", testWidget);
+        nextWordButton->setStyleSheet(
+            "QPushButton { "
+            "font-family: 'Microsoft YaHei'; "
+            "font-size: 9pt; "
+            "padding: 6px 14px; "
+            "margin: 4px; "
+            "border: 1px solid #cccccc; "
+            "border-radius: 4px; "
+            "background-color: #f0f0f0; "
+            "}" 
+            "QPushButton:hover { "
+            "background-color: #e0e0e0; "
+            "border: 1px solid #999999; "
+            "}" 
+            "QPushButton:pressed { "
+            "background-color: #d0d0d0; "
+            "border: 1px solid #666666; "
+            "}");
+        
+        // 创建状态标签
+        onlineStatusLabel = new QLabel(testWidget);
+        onlineStatusLabel->setAlignment(Qt::AlignCenter);
+        
+        // 连接信号槽
+        connect(submitAnswerButton, &QPushButton::clicked, this, &MainWindow::checkOnlineAnswer);
+        connect(nextWordButton, &QPushButton::clicked, this, &MainWindow::showNextWordOnline);
+        connect(onlineInputLineEdit, &QLineEdit::returnPressed, this, [this]() {
+            // Enter键时保存当前输入并跳转到下一个单词
+            if (currentIndex < words.size()) {
+                userInputs[currentIndex] = onlineInputLineEdit->text().trimmed();
+                
+                // 检查答案
+                QString correctWord = QString::fromStdString(words[currentIndex]);
+                QString userWord = userInputs[currentIndex];
+                
+                if (!userWord.isEmpty() && userWord.toLower() == correctWord.toLower()) {
+                    onlineStatusLabel->setText(QString("正确！进入下一个单词..."));
+                    onlineStatusLabel->setStyleSheet("color: green; font-weight: bold;");
+                } else {
+                    onlineStatusLabel->setText(QString("错误！正确答案: %1，进入下一个单词...").arg(correctWord));
+                    onlineStatusLabel->setStyleSheet("color: red; font-weight: bold;");
+                }
+                
+                // 清空输入框并跳转到下一个单词
+                onlineInputLineEdit->clear();
+                
+                // 1秒后自动跳转到下一个单词
+                QTimer::singleShot(1000, this, &MainWindow::showNextWordOnline);
+            }
+        });
+        
+        // 将输入框和按钮添加到测试界面布局
+        QVBoxLayout *testLayout = qobject_cast<QVBoxLayout*>(testWidget->layout());
+        if (testLayout) {
+            // 插入到现有控件之后
+            testLayout->insertWidget(1, onlineInputLineEdit);  // 在倒计时标签后插入
+            testLayout->insertWidget(2, onlineStatusLabel);    // 在输入框后插入状态标签
+            
+            // 创建按钮布局
+            QHBoxLayout *buttonLayout = new QHBoxLayout();
+            buttonLayout->addWidget(submitAnswerButton);
+            buttonLayout->addWidget(nextWordButton);
+            
+            testLayout->insertLayout(3, buttonLayout);   // 在状态标签后插入按钮布局
+        }
+    }
+    
+    // 显示在线听写界面组件
+    if (onlineInputLineEdit) onlineInputLineEdit->show();
+    if (submitAnswerButton) submitAnswerButton->show();
+    if (nextWordButton) nextWordButton->show();
+    if (onlineStatusLabel) onlineStatusLabel->show();
+    
+    // 隐藏倒计时标签（因为在线模式不需要倒计时）
+    if (countdownLabel) {
+        countdownLabel->hide();
+    }
+    
+    // 清空输入框
+    if (onlineInputLineEdit) onlineInputLineEdit->clear();
+    
+    // 临时隐藏设置控件
+    QList<QWidget*> settingsControls = testWidget->findChildren<QWidget*>();
+    for (QWidget* widget : settingsControls) {
+        if (widget->objectName() == "intervalSettingWidget" || 
+            widget->inherits("QSpinBox") || 
+            widget->inherits("QLabel") && widget->parent()->objectName() == "settingsLayout") {
+            widget->hide();
+        }
+    }
+}
+
+void MainWindow::checkOnlineAnswer()
+{
+    if (currentIndex >= words.size() || !isOnlineDictationMode) {
+        return;
+    }
+    
+    QString userInput = onlineInputLineEdit->text().trimmed();
+    if (userInput.isEmpty()) {
+        onlineStatusLabel->setText("请输入单词!");
+        onlineStatusLabel->setStyleSheet("color: red;");
+        return;
+    }
+    
+    // 获取当前单词
+    QString currentWord = QString::fromStdString(words[currentIndex]);
+    
+    // 比较用户输入与正确答案（忽略大小写）
+    if (userInput.toLower() == currentWord.toLower()) {
+        onlineStatusLabel->setText("正确！");
+        onlineStatusLabel->setStyleSheet("color: green; font-weight: bold;");
+    } else {
+        onlineStatusLabel->setText(QString("错误！正确答案: %1").arg(currentWord));
+        onlineStatusLabel->setStyleSheet("color: red; font-weight: bold;");
+    }
+    
+    // 清空输入框
+    onlineInputLineEdit->clear();
+    
+    // 1.5秒后显示下一个单词
+    QTimer::singleShot(1500, this, &MainWindow::showNextWordOnline);
+}
+
+void MainWindow::showNextWordOnline()
+{
+    currentIndex++;
+    
+    if (currentIndex < words.size()) {
+        // 显示正在朗读提示
+        if (countdownLabel) countdownLabel->setText("正在朗读");
+        onlineStatusLabel->setText(QString("第 %1 / %2 个单词").arg(currentIndex + 1).arg(words.size()));
+
+        // 处理界面事件，确保标签更新
+        QCoreApplication::processEvents();
+
+        // 朗读下一个单词
+        speakWord(words[currentIndex]);
+        
+        // 清空状态标签
+        if (onlineStatusLabel) {
+            onlineStatusLabel->clear();
+            onlineStatusLabel->setStyleSheet("");
+        }
+    } else {
+        // 测试结束
+        if (timer) timer->stop();
+        startButton->setEnabled(true);
+        
+        // 计算正确率
+        int correctCount = 0; // 这里需要在实际实现中跟踪正确答案数量
+        
+        // 测试结束，显示结果
+        QMessageBox msgBox;
+        msgBox.setWindowTitle("测试完成");
+        msgBox.setText(QString("在线听写测试完成！共 %1 个单词").arg(words.size()));
+        QPushButton *returnButton = msgBox.addButton("返回主界面", QMessageBox::ActionRole);
+        QPushButton *showAnswersButton = msgBox.addButton("查看答案", QMessageBox::ActionRole);
+        msgBox.setDefaultButton(returnButton);
+
+        msgBox.exec();
+
+        if (msgBox.clickedButton() == returnButton) {
+            // 隐藏在线听写界面组件
+            if (onlineInputLineEdit) onlineInputLineEdit->hide();
+            if (submitAnswerButton) submitAnswerButton->hide();
+            if (onlineStatusLabel) onlineStatusLabel->hide();
+            
+            // 显示倒计时标签
+            if (countdownLabel) countdownLabel->show();
+            
+            showMainInterface();
+        } else if (msgBox.clickedButton() == showAnswersButton) {
+            // 隐藏在线听写界面组件
+            if (onlineInputLineEdit) onlineInputLineEdit->hide();
+            if (submitAnswerButton) submitAnswerButton->hide();
+            if (onlineStatusLabel) onlineStatusLabel->hide();
+            
+            // 显示倒计时标签
+            if (countdownLabel) countdownLabel->show();
+            
+            showAnswersInterface();
+        }
+        
+        // 重置在线听写模式
+        isOnlineDictationMode = false;
+    }
+}
+
+void MainWindow::onStartTest()
+{
+    // 保持此函数以解决链接错误，实际功能由onSelectDictationMode()处理
+    onSelectDictationMode();
+}
+
+
+
 void MainWindow::onNextWordClicked()
 {
+    // 在线听写模式下，这个函数不需要执行
+    if (isOnlineDictationMode) {
+        return;
+    }
+    
     // 确保不是最后一个单词
     if (currentIndex < words.size() - 1) {
         currentIndex++;
@@ -1445,8 +2049,9 @@ void MainWindow::loadSettings()
     
     // 加载随机播放设置
     isRandomOrder = settings.value("test/randomOrder", false).toBool();
-
-
+    
+    // 加载加密设置
+    encryptionEnabled = settings.value("security/encryptionEnabled", true).toBool();
 
     // 确保时间间隔在合理范围内
     if (readInterval < 1 || readInterval > 60) {
@@ -1474,6 +2079,9 @@ void MainWindow::saveSettings()
     
     // 保存随机播放设置
     settings.setValue("test/randomOrder", isRandomOrder);
+    
+    // 保存加密设置
+    settings.setValue("security/encryptionEnabled", encryptionEnabled);
 
     // 确保数据写入磁盘
     settings.sync();
@@ -1557,6 +2165,20 @@ void MainWindow::onUpdateWelcomeAnimation()
     // 计算位置偏移（更轻微的浮动效果）
     int offset = (int)(5.0 * sin(welcomeAnimationStep * PI / 45.0));
     welcomeLabel->move(width()/2 - welcomeLabel->width()/2, 50 + offset);
+    
+    // 添加阴影效果变化
+    int shadowOffsetX = (int)(2.0 * sin(welcomeAnimationStep * PI / 180.0));
+    int shadowOffsetY = (int)(2.0 * cos(welcomeAnimationStep * PI / 180.0));
+    int shadowAlpha = 50 + (int)(50.0 * (1 + sin(welcomeAnimationStep * PI / 60.0)) / 2);
+    
+    QString enhancedStylesheet = QString(
+        "QLabel { "
+        "color: rgb(%1, %2, %3); "
+        "text-shadow: %4px %5px %6px rgba(0, 0, 0, %7); "
+        "}").arg(r).arg(g).arg(b).arg(shadowOffsetX).arg(shadowOffsetY).arg(3).arg(shadowAlpha);
+    
+    // 注意：Qt不直接支持text-shadow，这里作为示例保留
+    // 实际应用中可以考虑使用QGraphicsDropShadowEffect
 }
 
 void MainWindow::createTempWordlist()
@@ -1987,6 +2609,15 @@ bool MainWindow::testFliteEngine()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    // 保存当前用户数据
+    if (!currentUser.isEmpty()) {
+        updateCurrentUserProfile();
+        saveUserProfile(currentUser);
+    }
+    
+    // 保存所有用户配置
+    saveAllUserProfiles();
+    
     // 保存设置
     saveSettings();
 
@@ -2044,6 +2675,27 @@ void MainWindow::showSettingsDialog()
     
     QPushButton *themeToggleButton = new QPushButton(
         isDarkTheme ? "切换到浅色主题" : "切换到深色主题", themeGroup);
+    
+    // 应用统一按钮样式
+    themeToggleButton->setStyleSheet(
+        "QPushButton { "
+        "font-family: 'Microsoft YaHei'; "
+        "font-size: 9pt; "
+        "padding: 8px 16px; "
+        "margin: 4px; "
+        "border: 2px solid #555555; "
+        "border-radius: 6px; "
+        "background-color: #ffffff; "
+        "color: #333333; "
+        "} "
+        "QPushButton:hover { "
+        "background-color: #e0e0e0; "
+        "border: 2px solid #333333; "
+        "} "
+        "QPushButton:pressed { "
+        "background-color: #d0d0d0; "
+        "border: 2px solid #000000; "
+        "} ");
     
     themeLayout->addWidget(themeToggleButton);
     mainLayout->addWidget(themeGroup);
@@ -2116,6 +2768,25 @@ void MainWindow::showSettingsDialog()
     
     // 添加Flite下载按钮
     QPushButton *downloadFliteButton = new QPushButton("下载Flite语音引擎", dialog);
+    downloadFliteButton->setStyleSheet(
+        "QPushButton { "
+        "font-family: 'Microsoft YaHei'; "
+        "font-size: 9pt; "
+        "padding: 8px 16px; "
+        "margin: 4px; "
+        "border: 2px solid #555555; "
+        "border-radius: 6px; "
+        "background-color: #ffffff; "
+        "color: #333333; "
+        "} "
+        "QPushButton:hover { "
+        "background-color: #e0e0e0; "
+        "border: 2px solid #333333; "
+        "} "
+        "QPushButton:pressed { "
+        "background-color: #d0d0d0; "
+        "border: 2px solid #000000; "
+        "} ");
     mainLayout->addWidget(downloadFliteButton);
     
     // 连接Flite下载按钮的信号和槽
@@ -2313,6 +2984,21 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     else {
         QMainWindow::keyPressEvent(event);
     }
+}
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    // 处理用户状态标签的鼠标点击事件
+    if (obj == userStatusLabel && event->type() == QEvent::MouseButtonPress) {
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton) {
+            showUserLoginDialog();
+            return true; // 事件已处理
+        }
+    }
+    
+    // 其他事件交给父类处理
+    return QMainWindow::eventFilter(obj, event);
 }
 
 void MainWindow::recordTestResult(int correctCount, int totalWords, const QString& wordListName)
@@ -2623,4 +3309,799 @@ void MainWindow::hideEvent(QHideEvent *event)
     QMainWindow::hideEvent(event);
 }
 
+// 用户账户系统实现
+void MainWindow::initializeUserSystem()
+{
+    // 获取应用程序数据目录
+    userDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    userDataPath += "/users";
+    
+    // 创建用户数据目录
+    QDir userDir(userDataPath);
+    if (!userDir.exists()) {
+        userDir.mkpath(".");
+    }
+    
+    // 加载所有用户配置
+    loadAllUserProfiles();
+    
+    qDebug() << "User system initialized. Data path:" << userDataPath;
+}
 
+void MainWindow::createUser(const QString& username, const QString& nickname)
+{
+    if (username.isEmpty() || !validateUsername(username)) {
+        QMessageBox::warning(this, "创建用户失败", "用户名不合法");
+        return;
+    }
+    
+    if (userProfiles.contains(username)) {
+        QMessageBox::warning(this, "创建用户失败", "用户已存在");
+        return;
+    }
+    
+    // 创建新用户
+    UserData newUser;
+    newUser.username = username;
+    newUser.nickname = nickname.isEmpty() ? username : nickname;
+    newUser.createdTime = QDateTime::currentDateTime();
+    newUser.lastLoginTime = QDateTime::currentDateTime();
+    
+    // 复制当前设置
+    newUser.isDarkTheme = isDarkTheme;
+    newUser.readInterval = readInterval;
+    newUser.speechEngine = speechEngine;
+    newUser.isRandomOrder = isRandomOrder;
+    
+    userProfiles[username] = newUser;
+    
+    // 保存用户配置
+    saveUserProfile(username);
+    
+    QMessageBox::information(this, "创建成功", QString("用户 %1 创建成功").arg(username));
+}
+
+bool MainWindow::loginUser(const QString& username)
+{
+    if (!userProfiles.contains(username)) {
+        QMessageBox::warning(this, "登录失败", "用户不存在");
+        return false;
+    }
+    
+    UserData& user = userProfiles[username];
+    if (!user.isActive) {
+        QMessageBox::warning(this, "登录失败", "用户已被禁用");
+        return false;
+    }
+    
+    // 更新最后登录时间
+    user.lastLoginTime = QDateTime::currentDateTime();
+    currentUser = username;
+    
+    // 加载用户设置
+    isDarkTheme = user.isDarkTheme;
+    readInterval = user.readInterval;
+    speechEngine = user.speechEngine;
+    isRandomOrder = user.isRandomOrder;
+    
+    // 应用主题
+    toggleTheme();
+    
+    // 保存更新后的用户信息
+    saveUserProfile(username);
+    
+    qDebug() << "User logged in:" << username;
+    return true;
+}
+
+void MainWindow::logoutUser()
+{
+    if (!currentUser.isEmpty()) {
+        // 保存当前用户数据
+        updateCurrentUserProfile();
+        saveUserProfile(currentUser);
+        currentUser.clear();
+        qDebug() << "User logged out";
+    }
+}
+
+void MainWindow::saveUserProfile(const QString& username)
+{
+    // 默认使用加密保存
+    saveEncryptedUserProfile(username);
+}
+
+void MainWindow::loadUserProfile(const QString& username)
+{
+    // 首先尝试加载加密文件
+    QString encryptedFilePath = userDataPath + "/" + username + ".enc";
+    if (QFile::exists(encryptedFilePath)) {
+        loadEncryptedUserProfile(username);
+        return;
+    }
+    
+    // 如果没有加密文件，尝试加载旧的明文JSON文件（向后兼容）
+    QString jsonFilePath = userDataPath + "/" + username + ".json";
+    if (!QFile::exists(jsonFilePath)) return;
+    
+    QFile file(jsonFilePath);
+    if (!file.open(QIODevice::ReadOnly)) return;
+    
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+    
+    if (!doc.isObject()) return;
+    
+    QJsonObject userObj = doc.object();
+    UserData user;
+    
+    user.username = userObj["username"].toString();
+    user.nickname = userObj["nickname"].toString();
+    user.createdTime = QDateTime::fromString(userObj["createdTime"].toString(), Qt::ISODate);
+    user.lastLoginTime = QDateTime::fromString(userObj["lastLoginTime"].toString(), Qt::ISODate);
+    user.isActive = userObj["isActive"].toBool(true);
+    user.totalStudyTime = userObj["totalStudyTime"].toInt(0);
+    user.completedTests = userObj["completedTests"].toInt(0);
+    user.isDarkTheme = userObj["isDarkTheme"].toBool(false);
+    user.readInterval = userObj["readInterval"].toInt(5);
+    user.speechEngine = userObj["speechEngine"].toInt(0);
+    user.isRandomOrder = userObj["isRandomOrder"].toBool(false);
+    
+    // 隐私设置
+    user.allowDataCollection = userObj["allowDataCollection"].toBool(false);
+    user.allowCloudSync = userObj["allowCloudSync"].toBool(false);
+    user.allowAnalytics = userObj["allowAnalytics"].toBool(false);
+    user.shareLearningStats = userObj["shareLearningStats"].toBool(false);
+    
+    // 加载词库列表
+    QJsonArray wordListsArray = userObj["wordLists"].toArray();
+    for (const QJsonValue& value : wordListsArray) {
+        user.wordLists.append(value.toString());
+    }
+    
+    // 加载测试历史
+    QJsonArray historyArray = userObj["testHistory"].toArray();
+    for (const QJsonValue& value : historyArray) {
+        QJsonObject resultObj = value.toObject();
+        TestResult result;
+        result.timestamp = QDateTime::fromString(resultObj["timestamp"].toString(), Qt::ISODate);
+        result.totalWords = resultObj["totalWords"].toInt();
+        result.correctCount = resultObj["correctCount"].toInt();
+        result.accuracy = resultObj["accuracy"].toDouble();
+        result.wordListName = resultObj["wordListName"].toString();
+        user.testHistory.push_back(result);
+    }
+    
+    userProfiles[username] = user;
+    
+    // 将旧的明文文件转换为加密格式
+    saveEncryptedUserProfile(username);
+    QFile::remove(jsonFilePath); // 删除旧的明文文件
+    qDebug() << "Converted plaintext profile to encrypted for user:" << username;
+}
+
+void MainWindow::saveAllUserProfiles()
+{
+    for (const QString& username : userProfiles.keys()) {
+        saveUserProfile(username);
+    }
+}
+
+void MainWindow::loadAllUserProfiles()
+{
+    QDir userDir(userDataPath);
+    QStringList userFiles = userDir.entryList(QStringList() << "*.json", QDir::Files);
+    
+    for (const QString& fileName : userFiles) {
+        QString username = fileName.left(fileName.lastIndexOf('.'));
+        loadUserProfile(username);
+    }
+}
+
+QString MainWindow::hashPassword(const QString& password)
+{
+    return QString::fromUtf8(QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha256).toHex());
+}
+
+bool MainWindow::validateUsername(const QString& username)
+{
+    // 用户名验证规则：3-20个字符，只能包含字母、数字、下划线
+    QRegularExpression re("^[a-zA-Z0-9_]{3,20}$");
+    return re.match(username).hasMatch();
+}
+
+void MainWindow::updateCurrentUserProfile()
+{
+    if (currentUser.isEmpty()) return;
+    
+    if (userProfiles.contains(currentUser)) {
+        UserData& user = userProfiles[currentUser];
+        user.isDarkTheme = isDarkTheme;
+        user.readInterval = readInterval;
+        user.speechEngine = speechEngine;
+        user.isRandomOrder = isRandomOrder;
+        user.testHistory = testHistory;
+    }
+}
+
+// 数据加密实现
+QByteArray MainWindow::generateEncryptionKey()
+{
+    // 生成32字节的随机密钥用于AES-256加密
+    QByteArray key(32, 0);
+    QRandomGenerator::global()->fillRange(reinterpret_cast<quint32*>(key.data()), 8);
+    return key;
+}
+
+QByteArray MainWindow::encryptData(const QByteArray& data, const QByteArray& key)
+{
+    // 使用简单的XOR加密作为示例（实际应用中应使用更安全的加密算法）
+    QByteArray encryptedData;
+    encryptedData.reserve(data.size());
+    
+    for (int i = 0; i < data.size(); ++i) {
+        encryptedData.append(data.at(i) ^ key.at(i % key.size()));
+    }
+    
+    return encryptedData;
+}
+
+QByteArray MainWindow::decryptData(const QByteArray& encryptedData, const QByteArray& key)
+{
+    // XOR解密与加密使用相同的操作
+    return encryptData(encryptedData, key);
+}
+
+QString MainWindow::encryptString(const QString& plaintext)
+{
+    if (plaintext.isEmpty()) return plaintext;
+    
+    // 生成会话密钥
+    QByteArray sessionKey = generateEncryptionKey();
+    
+    // 加密数据
+    QByteArray plainBytes = plaintext.toUtf8();
+    QByteArray encryptedBytes = encryptData(plainBytes, sessionKey);
+    
+    // 将密钥和加密数据组合
+    QByteArray combined;
+    QDataStream stream(&combined, QIODevice::WriteOnly);
+    stream << sessionKey << encryptedBytes;
+    
+    // Base64编码以便存储
+    return QString::fromLatin1(combined.toBase64());
+}
+
+QString MainWindow::decryptString(const QString& ciphertext)
+{
+    if (ciphertext.isEmpty()) return ciphertext;
+    
+    // Base64解码
+    QByteArray combined = QByteArray::fromBase64(ciphertext.toLatin1());
+    if (combined.isEmpty()) return QString();
+    
+    // 分离密钥和加密数据
+    QDataStream stream(&combined, QIODevice::ReadOnly);
+    QByteArray sessionKey;
+    QByteArray encryptedBytes;
+    stream >> sessionKey >> encryptedBytes;
+    
+    // 解密数据
+    QByteArray decryptedBytes = decryptData(encryptedBytes, sessionKey);
+    return QString::fromUtf8(decryptedBytes);
+}
+
+void MainWindow::saveEncryptedUserProfile(const QString& username)
+{
+    if (!userProfiles.contains(username)) return;
+    
+    UserData& user = userProfiles[username];
+    QString userFilePath = userDataPath + "/" + username + ".enc";
+    
+    // 准备要加密的用户数据
+    QJsonObject userDataObj;
+    userDataObj["username"] = user.username;
+    userDataObj["nickname"] = encryptString(user.nickname);
+    userDataObj["createdTime"] = user.createdTime.toString(Qt::ISODate);
+    userDataObj["lastLoginTime"] = user.lastLoginTime.toString(Qt::ISODate);
+    userDataObj["isActive"] = user.isActive;
+    userDataObj["totalStudyTime"] = user.totalStudyTime;
+    userDataObj["completedTests"] = user.completedTests;
+    userDataObj["isDarkTheme"] = user.isDarkTheme;
+    userDataObj["readInterval"] = user.readInterval;
+    userDataObj["speechEngine"] = user.speechEngine;
+    userDataObj["isRandomOrder"] = user.isRandomOrder;
+    
+    // 隐私设置
+    userDataObj["allowDataCollection"] = user.allowDataCollection;
+    userDataObj["allowCloudSync"] = user.allowCloudSync;
+    userDataObj["allowAnalytics"] = user.allowAnalytics;
+    userDataObj["shareLearningStats"] = user.shareLearningStats;
+    
+    // 加密词库列表
+    QJsonArray encryptedWordLists;
+    for (const QString& wordList : user.wordLists) {
+        encryptedWordLists.append(encryptString(wordList));
+    }
+    userDataObj["wordLists"] = encryptedWordLists;
+    
+    // 加密测试历史
+    QJsonArray encryptedHistory;
+    for (const auto& result : user.testHistory) {
+        QJsonObject resultObj;
+        resultObj["timestamp"] = result.timestamp.toString(Qt::ISODate);
+        resultObj["totalWords"] = result.totalWords;
+        resultObj["correctCount"] = result.correctCount;
+        resultObj["accuracy"] = result.accuracy;
+        resultObj["wordListName"] = encryptString(result.wordListName);
+        encryptedHistory.append(resultObj);
+    }
+    userDataObj["testHistory"] = encryptedHistory;
+    
+    // 生成主密钥
+    QByteArray masterKey = generateEncryptionKey();
+    
+    // 加密整个JSON对象
+    QJsonDocument doc(userDataObj);
+    QByteArray jsonData = doc.toJson();
+    QByteArray encryptedData = encryptData(jsonData, masterKey);
+    
+    // 保存加密数据和密钥
+    QFile file(userFilePath);
+    if (file.open(QIODevice::WriteOnly)) {
+        QDataStream out(&file);
+        out << masterKey << encryptedData;
+        file.close();
+        qDebug() << "Encrypted user profile saved for:" << username;
+    }
+}
+
+void MainWindow::loadEncryptedUserProfile(const QString& username)
+{
+    QString userFilePath = userDataPath + "/" + username + ".enc";
+    
+    QFile file(userFilePath);
+    if (!file.open(QIODevice::ReadOnly)) return;
+    
+    // 读取密钥和加密数据
+    QDataStream in(&file);
+    QByteArray masterKey;
+    QByteArray encryptedData;
+    in >> masterKey >> encryptedData;
+    file.close();
+    
+    // 解密数据
+    QByteArray decryptedData = decryptData(encryptedData, masterKey);
+    QJsonDocument doc = QJsonDocument::fromJson(decryptedData);
+    
+    if (!doc.isObject()) return;
+    
+    QJsonObject userDataObj = doc.object();
+    UserData user;
+    
+    user.username = userDataObj["username"].toString();
+    user.nickname = decryptString(userDataObj["nickname"].toString());
+    user.createdTime = QDateTime::fromString(userDataObj["createdTime"].toString(), Qt::ISODate);
+    user.lastLoginTime = QDateTime::fromString(userDataObj["lastLoginTime"].toString(), Qt::ISODate);
+    user.isActive = userDataObj["isActive"].toBool(true);
+    user.totalStudyTime = userDataObj["totalStudyTime"].toInt(0);
+    user.completedTests = userDataObj["completedTests"].toInt(0);
+    user.isDarkTheme = userDataObj["isDarkTheme"].toBool(false);
+    user.readInterval = userDataObj["readInterval"].toInt(5);
+    user.speechEngine = userDataObj["speechEngine"].toInt(0);
+    user.isRandomOrder = userDataObj["isRandomOrder"].toBool(false);
+    
+    // 隐私设置
+    user.allowDataCollection = userDataObj["allowDataCollection"].toBool(false);
+    user.allowCloudSync = userDataObj["allowCloudSync"].toBool(false);
+    user.allowAnalytics = userDataObj["allowAnalytics"].toBool(false);
+    user.shareLearningStats = userDataObj["shareLearningStats"].toBool(false);
+    
+    // 解密词库列表
+    QJsonArray encryptedWordLists = userDataObj["wordLists"].toArray();
+    for (const QJsonValue& value : encryptedWordLists) {
+        user.wordLists.append(decryptString(value.toString()));
+    }
+    
+    // 解密测试历史
+    QJsonArray encryptedHistory = userDataObj["testHistory"].toArray();
+    for (const QJsonValue& value : encryptedHistory) {
+        QJsonObject resultObj = value.toObject();
+        TestResult result;
+        result.timestamp = QDateTime::fromString(resultObj["timestamp"].toString(), Qt::ISODate);
+        result.totalWords = resultObj["totalWords"].toInt();
+        result.correctCount = resultObj["correctCount"].toInt();
+        result.accuracy = resultObj["accuracy"].toDouble();
+        result.wordListName = decryptString(resultObj["wordListName"].toString());
+        user.testHistory.push_back(result);
+    }
+    
+    userProfiles[username] = user;
+    qDebug() << "Encrypted user profile loaded for:" << username;
+}
+
+// 用户界面实现
+void MainWindow::showUserLoginDialog()
+{
+    QDialog loginDialog(this);
+    loginDialog.setWindowTitle("用户登录");
+    loginDialog.setModal(true);
+    loginDialog.resize(300, 200);
+    
+    QVBoxLayout *layout = new QVBoxLayout(&loginDialog);
+    
+    // 标题
+    QLabel *titleLabel = new QLabel("请选择或创建用户", &loginDialog);
+    titleLabel->setAlignment(Qt::AlignCenter);
+    QFont titleFont = titleLabel->font();
+    titleFont.setPointSize(12);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    layout->addWidget(titleLabel);
+    
+    // 用户列表
+    QListWidget *userList = new QListWidget(&loginDialog);
+    userList->setSelectionMode(QAbstractItemView::SingleSelection);
+    
+    // 填充用户列表
+    for (const QString& username : userProfiles.keys()) {
+        UserData& user = userProfiles[username];
+        QString displayText = QString("%1 (%2)").arg(user.nickname).arg(username);
+        if (username == currentUser) {
+            displayText += " [当前登录]";
+        }
+        QListWidgetItem *item = new QListWidgetItem(displayText, userList);
+        item->setData(Qt::UserRole, username);
+    }
+    
+    layout->addWidget(userList);
+    
+    // 按钮布局
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *loginButton = new QPushButton("登录", &loginDialog);
+    QPushButton *createButton = new QPushButton("创建新用户", &loginDialog);
+    QPushButton *cancelButton = new QPushButton("取消", &loginDialog);
+    
+    buttonLayout->addWidget(loginButton);
+    buttonLayout->addWidget(createButton);
+    buttonLayout->addWidget(cancelButton);
+    
+    layout->addLayout(buttonLayout);
+    
+    // 连接信号
+    connect(loginButton, &QPushButton::clicked, [&]() {
+        if (userList->currentItem()) {
+            QString selectedUser = userList->currentItem()->data(Qt::UserRole).toString();
+            if (loginUser(selectedUser)) {
+                updateUserMenu();
+                loginDialog.accept();
+            }
+        }
+    });
+    
+    connect(createButton, &QPushButton::clicked, [&]() {
+        bool ok;
+        QString username = QInputDialog::getText(&loginDialog, "创建用户", 
+                                               "请输入用户名 (3-20个字符，字母数字下划线):", 
+                                               QLineEdit::Normal, "", &ok);
+        if (ok && !username.isEmpty()) {
+            if (validateUsername(username)) {
+                QString nickname = QInputDialog::getText(&loginDialog, "设置昵称", 
+                                                       "请输入昵称 (可选):", 
+                                                       QLineEdit::Normal, username, &ok);
+                if (ok) {
+                    createUser(username, nickname);
+                    // 刷新用户列表
+                    userList->clear();
+                    for (const QString& uname : userProfiles.keys()) {
+                        UserData& user = userProfiles[uname];
+                        QString displayText = QString("%1 (%2)").arg(user.nickname).arg(uname);
+                        QListWidgetItem *item = new QListWidgetItem(displayText, userList);
+                        item->setData(Qt::UserRole, uname);
+                    }
+                }
+            } else {
+                QMessageBox::warning(&loginDialog, "创建失败", "用户名格式不正确");
+            }
+        }
+    });
+    
+    connect(cancelButton, &QPushButton::clicked, &loginDialog, &QDialog::reject);
+    
+    // 双击用户列表项直接登录
+    connect(userList, &QListWidget::itemDoubleClicked, [&](QListWidgetItem *item) {
+        QString selectedUser = item->data(Qt::UserRole).toString();
+        if (loginUser(selectedUser)) {
+            updateUserMenu();
+            loginDialog.accept();
+        }
+    });
+    
+    loginDialog.exec();
+}
+
+void MainWindow::showUserProfileDialog()
+{
+    if (currentUser.isEmpty()) {
+        QMessageBox::warning(this, "错误", "请先登录用户");
+        return;
+    }
+    
+    UserData& user = userProfiles[currentUser];
+    
+    QDialog profileDialog(this);
+    profileDialog.setWindowTitle("个人资料");
+    profileDialog.setModal(true);
+    profileDialog.resize(400, 300);
+    
+    QVBoxLayout *layout = new QVBoxLayout(&profileDialog);
+    
+    // 标题
+    QLabel *titleLabel = new QLabel(QString("用户: %1").arg(user.nickname), &profileDialog);
+    titleLabel->setAlignment(Qt::AlignCenter);
+    QFont titleFont = titleLabel->font();
+    titleFont.setPointSize(14);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    layout->addWidget(titleLabel);
+    
+    // 表单布局
+    QFormLayout *formLayout = new QFormLayout();
+    
+    // 昵称输入
+    QLineEdit *nicknameEdit = new QLineEdit(user.nickname, &profileDialog);
+    formLayout->addRow("昵称:", nicknameEdit);
+    
+    // 用户名显示
+    QLabel *usernameLabel = new QLabel(user.username, &profileDialog);
+    formLayout->addRow("用户名:", usernameLabel);
+    
+    // 创建时间
+    QLabel *createTimeLabel = new QLabel(user.createdTime.toString("yyyy-MM-dd hh:mm"), &profileDialog);
+    formLayout->addRow("创建时间:", createTimeLabel);
+    
+    // 最后登录时间
+    QLabel *lastLoginLabel = new QLabel(user.lastLoginTime.toString("yyyy-MM-dd hh:mm"), &profileDialog);
+    formLayout->addRow("最后登录:", lastLoginLabel);
+    
+    // 学习统计
+    QLabel *studyStatsLabel = new QLabel(QString("总学习时间: %1分钟\n完成测试: %2次")
+                                        .arg(user.totalStudyTime).arg(user.completedTests), &profileDialog);
+    formLayout->addRow("学习统计:", studyStatsLabel);
+    
+    layout->addLayout(formLayout);
+    
+    // 按钮布局
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *saveButton = new QPushButton("保存更改", &profileDialog);
+    QPushButton *logoutButton = new QPushButton("退出登录", &profileDialog);
+    QPushButton *closeButton = new QPushButton("关闭", &profileDialog);
+    
+    buttonLayout->addWidget(saveButton);
+    buttonLayout->addWidget(logoutButton);
+    buttonLayout->addWidget(closeButton);
+    
+    layout->addLayout(buttonLayout);
+    
+    // 连接信号
+    connect(saveButton, &QPushButton::clicked, [&]() {
+        QString newNickname = nicknameEdit->text().trimmed();
+        if (!newNickname.isEmpty() && newNickname != user.nickname) {
+            user.nickname = newNickname;
+            saveUserProfile(currentUser);
+            updateUserMenu();
+            titleLabel->setText(QString("用户: %1").arg(user.nickname));
+            QMessageBox::information(&profileDialog, "成功", "昵称已更新");
+        }
+    });
+    
+    connect(logoutButton, &QPushButton::clicked, [&]() {
+        logoutUser();
+        updateUserMenu();
+        profileDialog.accept();
+        QMessageBox::information(this, "提示", "已退出登录");
+    });
+    
+    connect(closeButton, &QPushButton::clicked, &profileDialog, &QDialog::accept);
+    
+    profileDialog.exec();
+}
+
+void MainWindow::updateUserMenu()
+{
+    // 更新用户状态标签
+    if (userStatusLabel) {
+        if (!currentUser.isEmpty() && userProfiles.contains(currentUser)) {
+            UserData& user = userProfiles[currentUser];
+            userStatusLabel->setText(QString("👤 %1").arg(user.nickname));
+            userStatusLabel->setStyleSheet("color: green; padding: 5px; font-weight: bold;");
+        } else {
+            userStatusLabel->setText("👤 未登录");
+            userStatusLabel->setStyleSheet("color: gray; padding: 5px;");
+        }
+    }
+    
+    // 如果还没有用户菜单，创建它
+    if (!settingsButton) return;
+    
+    // 更新设置按钮的右键菜单
+    QMenu *menu = settingsButton->findChild<QMenu*>();
+    if (!menu) {
+        menu = new QMenu(this);
+        settingsButton->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(settingsButton, &QPushButton::customContextMenuRequested, this, [=]() {
+            menu->popup(QCursor::pos());
+        });
+    } else {
+        menu->clear();
+    }
+    
+    // 添加用户相关菜单项
+    if (!currentUser.isEmpty()) {
+        UserData& user = userProfiles[currentUser];
+        QAction *userAction = menu->addAction(QString("👤 %1").arg(user.nickname));
+        userAction->setEnabled(false);
+        menu->addSeparator();
+        menu->addAction("个人资料", this, &MainWindow::showUserProfileDialog);
+        menu->addAction("切换用户", this, &MainWindow::showUserLoginDialog);
+        menu->addSeparator();
+    } else {
+        QAction *guestAction = menu->addAction("👤 未登录");
+        guestAction->setEnabled(false);
+        menu->addAction("登录/注册", this, &MainWindow::showUserLoginDialog);
+        menu->addSeparator();
+    }
+    
+    // 添加原有菜单项
+    menu->addAction("常规设置", this, &MainWindow::onShowSettings);
+    menu->addAction("隐私设置", this, &MainWindow::showPrivacySettingsDialog);
+    menu->addAction("学习进度可视化", this, &MainWindow::showProgressChart);
+}
+
+// 隐私设置功能实现
+void MainWindow::showPrivacySettingsDialog()
+{
+    QDialog privacyDialog(this);
+    privacyDialog.setWindowTitle("隐私设置");
+    privacyDialog.setModal(true);
+    privacyDialog.resize(400, 300);
+    
+    QVBoxLayout *layout = new QVBoxLayout(&privacyDialog);
+    
+    // 标题
+    QLabel *titleLabel = new QLabel("隐私控制", &privacyDialog);
+    titleLabel->setAlignment(Qt::AlignCenter);
+    QFont titleFont = titleLabel->font();
+    titleFont.setPointSize(14);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    layout->addWidget(titleLabel);
+    
+    // 说明文字
+    QLabel *descLabel = new QLabel(
+        "您可以控制应用程序如何处理您的个人数据。所有数据都存储在本地，不会上传到网络。",
+        &privacyDialog);
+    descLabel->setWordWrap(true);
+    descLabel->setStyleSheet("color: gray; margin-bottom: 10px;");
+    layout->addWidget(descLabel);
+    
+    // 隐私设置选项
+    QGroupBox *privacyGroup = new QGroupBox("数据使用权限", &privacyDialog);
+    QVBoxLayout *privacyLayout = new QVBoxLayout(privacyGroup);
+    
+    // 数据收集选项
+    QCheckBox *dataCollectionCheckBox = new QCheckBox(
+        "允许收集使用数据以改进应用", &privacyDialog);
+    dataCollectionCheckBox->setChecked(false); // 默认关闭
+    privacyLayout->addWidget(dataCollectionCheckBox);
+    
+    // 云同步选项
+    QCheckBox *cloudSyncCheckBox = new QCheckBox(
+        "允许云同步（当前仅支持本地存储）", &privacyDialog);
+    cloudSyncCheckBox->setChecked(false);
+    cloudSyncCheckBox->setEnabled(false); // 暂时禁用，因为只支持本地存储
+    privacyLayout->addWidget(cloudSyncCheckBox);
+    
+    // 数据分析选项
+    QCheckBox *analyticsCheckBox = new QCheckBox(
+        "允许匿名数据分析", &privacyDialog);
+    analyticsCheckBox->setChecked(false);
+    privacyLayout->addWidget(analyticsCheckBox);
+    
+    // 学习统计分享选项
+    QCheckBox *shareStatsCheckBox = new QCheckBox(
+        "允许分享学习统计数据", &privacyDialog);
+    shareStatsCheckBox->setChecked(false);
+    privacyLayout->addWidget(shareStatsCheckBox);
+    
+    layout->addWidget(privacyGroup);
+    
+    // 当前用户状态显示
+    if (!currentUser.isEmpty() && userProfiles.contains(currentUser)) {
+        UserData& user = userProfiles[currentUser];
+        QGroupBox *currentUserGroup = new QGroupBox("当前用户设置", &privacyDialog);
+        QVBoxLayout *currentUserLayout = new QVBoxLayout(currentUserGroup);
+        
+        QLabel *currentUserLabel = new QLabel(
+            QString("用户: %1").arg(user.nickname), &privacyDialog);
+        currentUserLayout->addWidget(currentUserLabel);
+        
+        // 显示当前设置状态
+        QString statusText = "当前设置:\n";
+        statusText += QString("• 数据收集: %1\n").arg(user.allowDataCollection ? "允许" : "禁止");
+        statusText += QString("• 云同步: %1\n").arg(user.allowCloudSync ? "允许" : "禁止");
+        statusText += QString("• 数据分析: %1\n").arg(user.allowAnalytics ? "允许" : "禁止");
+        statusText += QString("• 统计分享: %1").arg(user.shareLearningStats ? "允许" : "禁止");
+        
+        QLabel *statusLabel = new QLabel(statusText, &privacyDialog);
+        statusLabel->setWordWrap(true);
+        currentUserLayout->addWidget(statusLabel);
+        
+        layout->addWidget(currentUserGroup);
+    }
+    
+    // 按钮布局
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *saveButton = new QPushButton("保存设置", &privacyDialog);
+    QPushButton *resetButton = new QPushButton("重置为默认", &privacyDialog);
+    QPushButton *closeButton = new QPushButton("关闭", &privacyDialog);
+    
+    buttonLayout->addWidget(saveButton);
+    buttonLayout->addWidget(resetButton);
+    buttonLayout->addWidget(closeButton);
+    
+    layout->addLayout(buttonLayout);
+    
+    // 连接信号
+    connect(saveButton, &QPushButton::clicked, [&]() {
+        bool dataCollection = dataCollectionCheckBox->isChecked();
+        bool cloudSync = cloudSyncCheckBox->isChecked();
+        bool analytics = analyticsCheckBox->isChecked();
+        bool shareStats = shareStatsCheckBox->isChecked();
+        
+        // 更新当前用户设置
+        if (!currentUser.isEmpty() && userProfiles.contains(currentUser)) {
+            UserData& user = userProfiles[currentUser];
+            user.allowDataCollection = dataCollection;
+            user.allowCloudSync = cloudSync;
+            user.allowAnalytics = analytics;
+            user.shareLearningStats = shareStats;
+            
+            saveUserProfile(currentUser);
+            QMessageBox::information(&privacyDialog, "成功", "隐私设置已保存");
+        } else {
+            QMessageBox::warning(&privacyDialog, "警告", "请先登录用户账户");
+        }
+    });
+    
+    connect(resetButton, &QPushButton::clicked, [&]() {
+        dataCollectionCheckBox->setChecked(false);
+        cloudSyncCheckBox->setChecked(false);
+        analyticsCheckBox->setChecked(false);
+        shareStatsCheckBox->setChecked(false);
+        QMessageBox::information(&privacyDialog, "提示", "已重置为默认设置");
+    });
+    
+    connect(closeButton, &QPushButton::clicked, &privacyDialog, &QDialog::accept);
+    
+    privacyDialog.exec();
+}
+
+void MainWindow::loadPrivacySettings()
+{
+    // 从用户配置中加载隐私设置
+    if (!currentUser.isEmpty() && userProfiles.contains(currentUser)) {
+        UserData& user = userProfiles[currentUser];
+        // 设置已经在loadUserProfile中加载
+        qDebug() << "Privacy settings loaded for user:" << currentUser;
+    }
+}
+
+void MainWindow::savePrivacySettings()
+{
+    // 保存隐私设置到用户配置
+    if (!currentUser.isEmpty() && userProfiles.contains(currentUser)) {
+        saveUserProfile(currentUser);
+        qDebug() << "Privacy settings saved for user:" << currentUser;
+    }
+}

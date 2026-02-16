@@ -1,81 +1,13 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include <QMainWindow>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QPushButton>
-#include <QListWidget>
-#include <QLineEdit>
-#include <QLabel>
-#include <QTimer>
-#include <QMessageBox>
-#include <QFileDialog>
-#include <QTextStream>
-#include <QCloseEvent>
-#include <QWidget>
-#include <QApplication>
-#include <QPalette>
-#include <QColor>
-#include <QDir>
-#include <QFile>
-#include <QProcess>
-#include <QScrollArea>
-#include <QMenu>
-#include <QAction>
-#include <QCursor>
-#include <QStackedWidget>
-#include <QTextEdit>
-#include <QDateTime>
-#include <QPropertyAnimation>
-#include <QGraphicsOpacityEffect>
-#include <QGraphicsDropShadowEffect>
-#include <QParallelAnimationGroup>
-#include <QSequentialAnimationGroup>
-#include <QEasingCurve>
-#include <QResizeEvent>
-#include <QInputDialog>
-#include <QSettings>
-#include <QMap>
-#include <QRegularExpression>
-#include <QDialog>
-#include <QDialogButtonBox>
-#include <QFormLayout>
-#include <QDirIterator>
-#include <QProgressDialog>
-#include <QStyleHints>
-#include <QComboBox>
-#include <QCheckBox>
-#include <QGroupBox>
-#include <QSpinBox>
-#include <QShortcut>
+// 使用预编译头文件包含大部分常用头文件
+#include "pch.h"
+
+// 只包含预编译头文件中没有的特定头文件
 #include <QKeySequence>
-#include <QDateTime>
-#include <QMap>
-#include <cmath>
-#include <windows.h>
-#include <vector>
-#include <string>
-#include <random>  // for random shuffle
-
-// 网络相关头文件
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
-#include <QUrl>
-
-// 用户账户系统相关头文件
 #include <QCryptographicHash>
-#include <QStandardPaths>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
-#include <QByteArray>
-#include <QDataStream>
 #include <QRandomGenerator>
-
-
-
 // 学习结果结构体
 struct TestResult {
     QDateTime timestamp;
@@ -84,7 +16,6 @@ struct TestResult {
     double accuracy;
     QString wordListName;
 };
-
 // 用户数据结构
 struct UserData {
     QString username;
@@ -115,9 +46,7 @@ struct UserData {
                  isDarkTheme(false), readInterval(5), speechEngine(0), isRandomOrder(false),
                  allowDataCollection(false), allowCloudSync(false), 
                  allowAnalytics(false), shareLearningStats(false) {}
-};
-
-QT_BEGIN_NAMESPACE
+};QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
@@ -239,6 +168,7 @@ private:
     bool isValidWordlistDir; // 词库目录是否有效
     QString wordlistDirPath; // 词库目录路径
     QMap<QString, QString> wordlistFiles; // 词库文件列表
+    QMap<QString, QStringList> wordlistGroups; // 词库分组管理
     QString tempWordlistFile; // 临时词库文件路径
     int speechEngine; // 语音引擎选择 (0=SAPI, 1=Flite)
     bool isRandomOrder; // 是否随机播放单词
@@ -258,12 +188,34 @@ private:
     void checkWordlistDirectory(); // 检查词库目录
     bool isValidWordlistFile(const QString &filePath); // 检查词库文件是否有效
     void loadSettings(); // 加载配置
-    void saveSettings(); // 保存配置
+    bool saveSettings(bool requirePasswordInput = true); // 保存配置，默认要求输入密码
+    
+    // 配置文件加密相关函数
+    bool encryptConfigFile(const QString& password);
+    bool decryptConfigFile(const QString& password, int attemptCount = 0);
     void loadWordlistFiles(); // 加载词库文件列表
     void createTempWordlist(); // 创建临时词库文件
     void saveToTempWordlist(); // 保存到临时词库文件
     void loadFromTempWordlist(); // 从临时词库加载
     bool testFliteEngine(); // 测试Flite引擎是否正常工作
+    
+    // 词库分组管理
+    void initializeWordlistGroups(); // 初始化词库分组
+    void createWordlistGroup(const QString &groupName); // 创建词库分组
+    void editWordlistGroup(const QString &oldGroupName, const QString &newGroupName); // 编辑词库分组
+    void deleteWordlistGroup(const QString &groupName); // 删除词库分组
+    void addWordlistToGroup(const QString &wordlistName, const QString &groupName); // 将词库添加到分组
+    void removeWordlistFromGroup(const QString &wordlistName, const QString &groupName); // 从分组中移除词库
+    void saveWordlistGroups(); // 保存词库分组配置
+    void loadWordlistGroups(); // 加载词库分组配置
+    
+    // 词库导入导出
+    void importWordlist(const QString &filePath); // 导入词库
+    void exportWordlist(const QString &filePath, const QString &format); // 导出词库
+    void importFromCSV(const QString &filePath); // 从CSV导入
+    void exportToCSV(const QString &filePath); // 导出到CSV
+    void importFromExcel(const QString &filePath); // 从Excel导入
+    void exportToExcel(const QString &filePath); // 导出到Excel
     
     // 学习进度相关
     std::vector<TestResult> testHistory;
@@ -337,7 +289,7 @@ private:
     // 用户账户系统函数
     void initializeUserSystem();  // 初始化用户系统
     void createUser(const QString& username, const QString& nickname = "");
-    bool loginUser(const QString& username);
+    bool loginUser(const QString& username, const QString& password = "");
     void logoutUser();
     void saveUserProfile(const QString& username);
     void loadUserProfile(const QString& username);
@@ -351,10 +303,16 @@ private:
     QByteArray generateEncryptionKey();
     QByteArray encryptData(const QByteArray& data, const QByteArray& key);
     QByteArray decryptData(const QByteArray& encryptedData, const QByteArray& key);
+    QByteArray deriveKeyFromPassword(const QString& password, const QByteArray& salt, int iterations = 100000);
     QString encryptString(const QString& plaintext);
     QString decryptString(const QString& ciphertext);
-    void saveEncryptedUserProfile(const QString& username);
-    void loadEncryptedUserProfile(const QString& username);
+    void saveEncryptedUserProfile(const QString& username, const QString& password);
+    void loadEncryptedUserProfile(const QString& username, const QString& password);
+    void savePlainUserProfile(const QString& username);
+    void loadPlainUserProfile(const QString& username);
+    QString getPasswordForUser(const QString& username);
+    void savePasswordForUser(const QString& username, const QString& password);
+    void initializeProgram();
     
     // 用户界面相关函数
     void showUserLoginDialog();

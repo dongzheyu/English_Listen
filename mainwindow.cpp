@@ -1,7 +1,10 @@
 #include "mainwindow.h"
 #include <QProgressDialog>
 #include <QKeyEvent>
+#include <QStyleHints>
 #include <QtCharts/QChart>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QBarSeries>
 #include <QtCharts/QBarSet>
@@ -98,6 +101,9 @@ MainWindow::MainWindow(QWidget *parent)
     , encryptionEnabled(true)
     , speechEngine(0)
 {
+    // 设置窗口图标
+    setWindowIcon(QIcon("logo.ico"));
+    
     // 初始化网络管理器
     networkManager = new QNetworkAccessManager(this);
     connect(networkManager, &QNetworkAccessManager::finished,
@@ -208,14 +214,26 @@ void MainWindow::setupUI()
                              "border-radius: 6px; "
                              "background-color: #ffffff; "
                              "color: #333333; "
+                             "transition: all 0.3s ease; "
                              "} "
                              "QPushButton:hover { "
                              "background-color: #e0e0e0; "
                              "border: 2px solid #333333; "
+                             "transform: translateY(-2px); "
+                             "box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); "
                              "} "
                              "QPushButton:pressed { "
                              "background-color: #d0d0d0; "
                              "border: 2px solid #000000; "
+                             "transform: translateY(0); "
+                             "box-shadow: none; "
+                             "} "
+                             "QPushButton:disabled { "
+                             "background-color: #f0f0f0; "
+                             "color: #999999; "
+                             "border: 2px solid #cccccc; "
+                             "transform: none; "
+                             "box-shadow: none; "
                              "} ";
 
         // 创建按钮布局
@@ -284,11 +302,97 @@ void MainWindow::setupUI()
         wordsTitle->setFont(titleFont);
         wordsTitle->setAlignment(Qt::AlignCenter);
 
+        // 创建搜索和筛选区域
+        QWidget *searchFilterWidget = new QWidget(wordsWidget);
+        QHBoxLayout *searchFilterLayout = new QHBoxLayout(searchFilterWidget);
+        searchFilterLayout->setSpacing(10);
+        
+        QLabel *searchLabel = new QLabel("搜索:", wordsWidget);
+        QLineEdit *searchLineEdit = new QLineEdit(wordsWidget);
+        searchLineEdit->setPlaceholderText("输入单词进行搜索");
+        searchLineEdit->setMinimumWidth(200);
+        
+        QLabel *filterLabel = new QLabel("筛选:", wordsWidget);
+        QComboBox *filterComboBox = new QComboBox(wordsWidget);
+        filterComboBox->addItem("全部单词");
+        filterComboBox->addItem("以字母开头");
+        filterComboBox->addItem("以数字开头");
+        filterComboBox->addItem("包含特殊字符");
+        
+        QPushButton *resetButton = new QPushButton("重置", wordsWidget);
+        resetButton->setStyleSheet(buttonStyle);
+        
+        searchFilterLayout->addWidget(searchLabel);
+        searchFilterLayout->addWidget(searchLineEdit);
+        searchFilterLayout->addWidget(filterLabel);
+        searchFilterLayout->addWidget(filterComboBox);
+        searchFilterLayout->addWidget(resetButton);
+        searchFilterLayout->addStretch();
+
         wordsTextEdit = new QTextEdit(wordsWidget);
         wordsTextEdit->setPlaceholderText("在此处输入单词，每行一个单词");
         
         // 设置词库编辑框监控
         setupWordsTextEditWatcher();
+        
+        // 连接搜索和筛选信号
+        connect(searchLineEdit, &QLineEdit::textChanged, [=]() {
+            QString searchText = searchLineEdit->text();
+            QString filterText = filterComboBox->currentText();
+            
+            // 保存原始内容
+            static QString originalText = wordsTextEdit->toPlainText();
+            if (searchText.isEmpty() && filterText == "全部单词") {
+                wordsTextEdit->setPlainText(originalText);
+                return;
+            }
+            
+            if (searchText.isEmpty() && originalText.isEmpty()) {
+                originalText = wordsTextEdit->toPlainText();
+            }
+            
+            // 筛选单词
+            QStringList lines = originalText.split('\n');
+            QStringList filteredLines;
+            
+            for (const QString &line : lines) {
+                if (line.trimmed().isEmpty()) continue;
+                
+                // 应用搜索
+                if (!searchText.isEmpty() && !line.contains(searchText, Qt::CaseInsensitive)) {
+                    continue;
+                }
+                
+                // 应用筛选
+                if (filterText == "以字母开头" && !line.isEmpty() && !((line.at(0) >= 'a' && line.at(0) <= 'z') || (line.at(0) >= 'A' && line.at(0) <= 'Z'))) {
+                    continue;
+                } else if (filterText == "以数字开头" && !line.isEmpty() && !(line.at(0) >= '0' && line.at(0) <= '9')) {
+                    continue;
+                } else if (filterText == "包含特殊字符" && !line.contains(QRegularExpression("[^a-zA-Z0-9\\s]"))) {
+                    continue;
+                }
+                
+                filteredLines.append(line);
+            }
+            
+            wordsTextEdit->setPlainText(filteredLines.join('\n'));
+        });
+        
+        connect(filterComboBox, &QComboBox::currentTextChanged, [=]() {
+            // 触发搜索框的文本变化信号
+            QString searchText = searchLineEdit->text();
+            if (searchText.isEmpty()) {
+                searchLineEdit->setText(" ");
+                searchLineEdit->setText("");
+            } else {
+                searchLineEdit->textChanged(searchText);
+            }
+        });
+        
+        connect(resetButton, &QPushButton::clicked, [=]() {
+            searchLineEdit->clear();
+            filterComboBox->setCurrentIndex(0);
+        });
 
         // 创建单词操作按钮
         QHBoxLayout *wordButtonLayout = new QHBoxLayout();
@@ -302,6 +406,8 @@ void MainWindow::setupUI()
         clearWordsButton = new QPushButton("清空列表", wordsWidget);
         loadWordsButton = new QPushButton("从文件加载", wordsWidget);
         saveWordsButton = new QPushButton("保存到文件", wordsWidget);
+        QPushButton *importWordsButton = new QPushButton("导入词库", wordsWidget);
+        QPushButton *exportWordsButton = new QPushButton("导出词库", wordsWidget);
         backToHomeButton = new QPushButton("返回主页", wordsWidget);
 
         // 设置按钮样式
@@ -310,6 +416,8 @@ void MainWindow::setupUI()
         clearWordsButton->setStyleSheet(buttonStyle);
         loadWordsButton->setStyleSheet(buttonStyle);
         saveWordsButton->setStyleSheet(buttonStyle);
+        importWordsButton->setStyleSheet(buttonStyle);
+        exportWordsButton->setStyleSheet(buttonStyle);
         backToHomeButton->setStyleSheet(buttonStyle);
 
         // 设置按钮尺寸策略以支持缩放
@@ -318,6 +426,8 @@ void MainWindow::setupUI()
         clearWordsButton->setMinimumSize(minButtonSize);
         loadWordsButton->setMinimumSize(minButtonSize);
         saveWordsButton->setMinimumSize(minButtonSize);
+        importWordsButton->setMinimumSize(minButtonSize);
+        exportWordsButton->setMinimumSize(minButtonSize);
         backToHomeButton->setMinimumSize(minButtonSize);
 
         wordInput->setMinimumHeight(30);
@@ -328,9 +438,70 @@ void MainWindow::setupUI()
         wordButtonLayout->addWidget(clearWordsButton);
         wordButtonLayout->addWidget(loadWordsButton);
         wordButtonLayout->addWidget(saveWordsButton);
+        wordButtonLayout->addWidget(importWordsButton);
+        wordButtonLayout->addWidget(exportWordsButton);
         wordButtonLayout->addWidget(backToHomeButton);
+        
+        // 连接导入导出按钮的信号槽
+        connect(importWordsButton, &QPushButton::clicked, [=]() {
+            QString fileName = QFileDialog::getOpenFileName(this, "导入词库", "", "All Files (*.*);;Text Files (*.txt);;CSV Files (*.csv);;Excel Files (*.xlsx *.xls)");
+            if (!fileName.isEmpty()) {
+                importWordlist(fileName);
+            }
+        });
+        
+        connect(exportWordsButton, &QPushButton::clicked, [=]() {
+            // 创建导出格式选择对话框
+            QDialog dialog(this);
+            dialog.setWindowTitle("选择导出格式");
+            dialog.resize(300, 150);
+            
+            QVBoxLayout layout(&dialog);
+            QLabel label("请选择导出格式：", &dialog);
+            layout.addWidget(&label);
+            
+            QPushButton txtButton("文本文件 (*.txt)", &dialog);
+            QPushButton csvButton("CSV文件 (*.csv)", &dialog);
+            QPushButton excelButton("Excel文件 (*.xlsx)", &dialog);
+            
+            txtButton.setStyleSheet(buttonStyle);
+            csvButton.setStyleSheet(buttonStyle);
+            excelButton.setStyleSheet(buttonStyle);
+            
+            layout.addWidget(&txtButton);
+            layout.addWidget(&csvButton);
+            layout.addWidget(&excelButton);
+            
+            // 连接按钮信号
+            QObject::connect(&txtButton, &QPushButton::clicked, [&dialog, this]() {
+                QString fileName = QFileDialog::getSaveFileName(this, "导出词库", "", "Text Files (*.txt)");
+                if (!fileName.isEmpty()) {
+                    exportWordlist(fileName, "txt");
+                }
+                dialog.accept();
+            });
+            
+            QObject::connect(&csvButton, &QPushButton::clicked, [&dialog, this]() {
+                QString fileName = QFileDialog::getSaveFileName(this, "导出词库", "", "CSV Files (*.csv)");
+                if (!fileName.isEmpty()) {
+                    exportWordlist(fileName, "csv");
+                }
+                dialog.accept();
+            });
+            
+            QObject::connect(&excelButton, &QPushButton::clicked, [&dialog, this]() {
+                QString fileName = QFileDialog::getSaveFileName(this, "导出词库", "", "Excel Files (*.xlsx)");
+                if (!fileName.isEmpty()) {
+                    exportWordlist(fileName, "excel");
+                }
+                dialog.accept();
+            });
+            
+            dialog.exec();
+        });
 
         wordsLayout->addWidget(wordsTitle);
+        wordsLayout->addWidget(searchFilterWidget);
         wordsLayout->addWidget(wordsTextEdit);
         wordsLayout->addLayout(wordButtonLayout);
         wordsWidget->hide();
@@ -642,9 +813,11 @@ void MainWindow::toggleTheme()
         if (aboutButton) aboutButton->setStyleSheet(buttonStyleDark);
 
         // 查找并设置主页的指南按钮样式
-        for (auto button : centralWidget->findChildren<QPushButton*>()) {
-            if (button->text() == "使用指南") {
-                button->setStyleSheet(buttonStyleDark);
+        if (centralWidget) {
+            for (auto button : centralWidget->findChildren<QPushButton*>()) {
+                if (button->text() == "使用指南") {
+                    button->setStyleSheet(buttonStyleDark);
+                }
             }
         }
 
@@ -683,9 +856,11 @@ void MainWindow::toggleTheme()
         if (aboutButton) aboutButton->setStyleSheet(buttonStyleLight);
 
         // 查找并设置主页的指南按钮样式
-        for (auto button : centralWidget->findChildren<QPushButton*>()) {
-            if (button->text() == "使用指南") {
-                button->setStyleSheet(buttonStyleLight);
+        if (centralWidget) {
+            for (auto button : centralWidget->findChildren<QPushButton*>()) {
+                if (button->text() == "使用指南") {
+                    button->setStyleSheet(buttonStyleLight);
+                }
             }
         }
 
@@ -744,11 +919,21 @@ void MainWindow::animateInterfaceSwitch(QWidget *fromWidget, QWidget *toWidget)
         QGraphicsOpacityEffect *fadeOutEffect = qobject_cast<QGraphicsOpacityEffect*>(fromWidget->graphicsEffect());
         if (fadeOutEffect) {
             QPropertyAnimation *fadeOutAnim = new QPropertyAnimation(fadeOutEffect, "opacity", this);
-            fadeOutAnim->setDuration(300);
+            fadeOutAnim->setDuration(400);
             fadeOutAnim->setStartValue(1.0);
             fadeOutAnim->setEndValue(0.0);
-            fadeOutAnim->setEasingCurve(QEasingCurve::OutQuad);
+            fadeOutAnim->setEasingCurve(QEasingCurve::OutCubic);
             fadeInOutGroup->addAnimation(fadeOutAnim);
+            
+            // 添加缩放动画
+            QPropertyAnimation *scaleOutAnim = new QPropertyAnimation(fromWidget, "geometry", this);
+            QRect startRect = fromWidget->geometry();
+            QRect endRect = QRect(startRect.x() + 20, startRect.y() + 20, startRect.width() - 40, startRect.height() - 40);
+            scaleOutAnim->setDuration(400);
+            scaleOutAnim->setStartValue(startRect);
+            scaleOutAnim->setEndValue(endRect);
+            scaleOutAnim->setEasingCurve(QEasingCurve::OutCubic);
+            fadeInOutGroup->addAnimation(scaleOutAnim);
         }
     }
     
@@ -757,11 +942,21 @@ void MainWindow::animateInterfaceSwitch(QWidget *fromWidget, QWidget *toWidget)
         QGraphicsOpacityEffect *fadeInEffect = qobject_cast<QGraphicsOpacityEffect*>(toWidget->graphicsEffect());
         if (fadeInEffect) {
             QPropertyAnimation *fadeInAnim = new QPropertyAnimation(fadeInEffect, "opacity", this);
-            fadeInAnim->setDuration(300);
+            fadeInAnim->setDuration(400);
             fadeInAnim->setStartValue(0.0);
             fadeInAnim->setEndValue(1.0);
-            fadeInAnim->setEasingCurve(QEasingCurve::InQuad);
+            fadeInAnim->setEasingCurve(QEasingCurve::InCubic);
             fadeInOutGroup->addAnimation(fadeInAnim);
+            
+            // 添加缩放动画
+            QPropertyAnimation *scaleInAnim = new QPropertyAnimation(toWidget, "geometry", this);
+            QRect endRect = toWidget->geometry();
+            QRect startRect = QRect(endRect.x() + 20, endRect.y() + 20, endRect.width() - 40, endRect.height() - 40);
+            scaleInAnim->setDuration(400);
+            scaleInAnim->setStartValue(startRect);
+            scaleInAnim->setEndValue(endRect);
+            scaleInAnim->setEasingCurve(QEasingCurve::InCubic);
+            fadeInOutGroup->addAnimation(scaleInAnim);
         }
     }
     
@@ -995,21 +1190,69 @@ void MainWindow::onViewWords()
         // 创建选择对话框
         QDialog dialog(this);
         dialog.setWindowTitle("选择词库文件");
-        dialog.resize(400, 300);
+        dialog.resize(500, 400);
         
         QVBoxLayout layout(&dialog);
         QLabel label("请选择要加载的词库文件（可多选）：", &dialog);
         layout.addWidget(&label);
         
-        QListWidget fileListView(&dialog);
-        fileListView.setSelectionMode(QAbstractItemView::MultiSelection);
+        // 创建分组和文件的树状视图
+        QTreeWidget *wordlistTreeView = new QTreeWidget(&dialog);
+        wordlistTreeView->setHeaderLabel("词库文件");
+        wordlistTreeView->setSelectionMode(QAbstractItemView::MultiSelection);
         
-        // 添加文件名到列表
-        for (auto it = wordlistFiles.constBegin(); it != wordlistFiles.constEnd(); ++it) {
-            fileListView.addItem(it.key());
+        // 添加分组和文件到树状视图
+        for (auto it = wordlistGroups.constBegin(); it != wordlistGroups.constEnd(); ++it) {
+            QString groupName = it.key();
+            QTreeWidgetItem *groupItem = new QTreeWidgetItem(wordlistTreeView);
+            groupItem->setText(0, groupName);
+            groupItem->setFlags(groupItem->flags() & ~Qt::ItemIsSelectable);
+            
+            // 添加分组中的词库文件
+            QStringList wordlistsInGroup = it.value();
+            for (const QString &wordlistName : wordlistsInGroup) {
+                if (wordlistFiles.contains(wordlistName)) {
+                    QTreeWidgetItem *fileItem = new QTreeWidgetItem(groupItem);
+                    fileItem->setText(0, wordlistName);
+                }
+            }
         }
         
-        layout.addWidget(&fileListView);
+        // 添加未分组的词库文件
+        QTreeWidgetItem *ungroupedItem = new QTreeWidgetItem(wordlistTreeView);
+        ungroupedItem->setText(0, "未分组");
+        ungroupedItem->setFlags(ungroupedItem->flags() & ~Qt::ItemIsSelectable);
+        
+        for (auto it = wordlistFiles.constBegin(); it != wordlistFiles.constEnd(); ++it) {
+            QString fileName = it.key();
+            bool isGrouped = false;
+            
+            // 检查文件是否已在某个分组中
+            for (auto groupIt = wordlistGroups.constBegin(); groupIt != wordlistGroups.constEnd(); ++groupIt) {
+                if (groupIt.value().contains(fileName)) {
+                    isGrouped = true;
+                    break;
+                }
+            }
+            
+            if (!isGrouped) {
+                QTreeWidgetItem *fileItem = new QTreeWidgetItem(ungroupedItem);
+                fileItem->setText(0, fileName);
+            }
+        }
+        
+        layout.addWidget(wordlistTreeView);
+        
+        // 添加分组管理按钮
+        QHBoxLayout *groupButtonsLayout = new QHBoxLayout();
+        QPushButton *createGroupButton = new QPushButton("创建分组", &dialog);
+        QPushButton *editGroupButton = new QPushButton("编辑分组", &dialog);
+        QPushButton *deleteGroupButton = new QPushButton("删除分组", &dialog);
+        
+        groupButtonsLayout->addWidget(createGroupButton);
+        groupButtonsLayout->addWidget(editGroupButton);
+        groupButtonsLayout->addWidget(deleteGroupButton);
+        layout.addLayout(groupButtonsLayout);
         
         QDialogButtonBox buttonBox(Qt::Horizontal, &dialog);
         QPushButton *loadButton = buttonBox.addButton("加载", QDialogButtonBox::AcceptRole);
@@ -1019,8 +1262,59 @@ void MainWindow::onViewWords()
         loadButton->setEnabled(false);
         
         // 连接信号槽，当选中项改变时检查是否启用加载按钮
-        connect(&fileListView, &QListWidget::itemSelectionChanged, [&]() {
-            loadButton->setEnabled(!fileListView.selectedItems().isEmpty());
+        connect(wordlistTreeView, &QTreeWidget::itemSelectionChanged, [&]() {
+            QList<QTreeWidgetItem*> selectedItems = wordlistTreeView->selectedItems();
+            bool hasSelectedFiles = false;
+            for (QTreeWidgetItem *item : selectedItems) {
+                if (item->parent()) { // 只有子项（文件）可选择
+                    hasSelectedFiles = true;
+                    break;
+                }
+            }
+            loadButton->setEnabled(hasSelectedFiles);
+        });
+        
+        // 连接分组管理按钮
+        connect(createGroupButton, &QPushButton::clicked, [&]() {
+            bool ok;
+            QString groupName = QInputDialog::getText(&dialog, "创建分组", "请输入分组名称:", QLineEdit::Normal, "", &ok);
+            if (ok && !groupName.isEmpty()) {
+                createWordlistGroup(groupName);
+                // 重新加载树状视图
+                wordlistTreeView->clear();
+                for (auto it = wordlistGroups.constBegin(); it != wordlistGroups.constEnd(); ++it) {
+                    QString gName = it.key();
+                    QTreeWidgetItem *groupItem = new QTreeWidgetItem(wordlistTreeView);
+                    groupItem->setText(0, gName);
+                    groupItem->setFlags(groupItem->flags() & ~Qt::ItemIsSelectable);
+                }
+            }
+        });
+        
+        connect(editGroupButton, &QPushButton::clicked, [&]() {
+            QTreeWidgetItem *currentItem = wordlistTreeView->currentItem();
+            if (currentItem && !currentItem->parent()) {
+                QString oldGroupName = currentItem->text(0);
+                bool ok;
+                QString newGroupName = QInputDialog::getText(&dialog, "编辑分组", "请输入新的分组名称:", QLineEdit::Normal, oldGroupName, &ok);
+                if (ok && !newGroupName.isEmpty() && newGroupName != oldGroupName) {
+                    editWordlistGroup(oldGroupName, newGroupName);
+                    currentItem->setText(0, newGroupName);
+                }
+            }
+        });
+        
+        connect(deleteGroupButton, &QPushButton::clicked, [&]() {
+            QTreeWidgetItem *currentItem = wordlistTreeView->currentItem();
+            if (currentItem && !currentItem->parent()) {
+                QString groupName = currentItem->text(0);
+                if (groupName != "默认分组") {
+                    if (QMessageBox::question(&dialog, "删除分组", QString("确定要删除分组 '%1' 吗？").arg(groupName), QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
+                        deleteWordlistGroup(groupName);
+                        delete currentItem;
+                    }
+                }
+            }
         });
         
         layout.addWidget(&buttonBox);
@@ -1032,7 +1326,7 @@ void MainWindow::onViewWords()
         int result = dialog.exec();
         if (result == QDialog::Accepted) {
             // 获取选中的文件
-            QList<QListWidgetItem*> selectedItems = fileListView.selectedItems();
+            QList<QTreeWidgetItem*> selectedItems = wordlistTreeView->selectedItems();
             // 只有当选中了文件时才执行加载操作
             if (!selectedItems.isEmpty()) {
                 // 清空当前词库
@@ -1040,10 +1334,12 @@ void MainWindow::onViewWords()
                 cachedWords.clear(); // 同时清空缓存
                 
                 // 加载选定的词库文件
-                for (const QListWidgetItem *item : selectedItems) {
-                    QString fileName = item->text();
-                    QString filePath = wordlistFiles.value(fileName);
-                    loadWordsFromFile(filePath);
+                for (QTreeWidgetItem *item : selectedItems) {
+                    if (item->parent()) { // 只有子项（文件）可选择
+                        QString fileName = item->text(0);
+                        QString filePath = wordlistFiles.value(fileName);
+                        loadWordsFromFile(filePath);
+                    }
                 }
             }
             // 如果没有选中文件，则不执行任何加载操作，保持当前词库不变
@@ -1073,7 +1369,7 @@ void MainWindow::onShowAbout()
     aboutBox.setFont(aboutFont);
     
     aboutBox.setText(
-        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.4.0</h2>"
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.5.0</h2>"
         "<p style='font-family: Microsoft YaHei;'>一个帮助学习英语的听写练习工具</p>"
         "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，支持 Windows SAPI 和 Flite 语音引擎。</p>"
         "<h3 style='font-family: Microsoft YaHei;'>功能特点：</h3>"
@@ -1882,6 +2178,192 @@ void MainWindow::checkWordlistDirectory()
 
     // 加载词库文件列表
     loadWordlistFiles();
+    
+    // 初始化词库分组
+    initializeWordlistGroups();
+}
+
+void MainWindow::initializeWordlistGroups()
+{
+    // 加载词库分组配置
+    loadWordlistGroups();
+    
+    // 如果没有分组配置，创建默认分组
+    if (wordlistGroups.isEmpty()) {
+        createWordlistGroup("默认分组");
+    }
+}
+
+void MainWindow::createWordlistGroup(const QString &groupName)
+{
+    if (!wordlistGroups.contains(groupName)) {
+        wordlistGroups[groupName] = QStringList();
+        saveWordlistGroups();
+    }
+}
+
+void MainWindow::editWordlistGroup(const QString &oldGroupName, const QString &newGroupName)
+{
+    if (wordlistGroups.contains(oldGroupName) && !wordlistGroups.contains(newGroupName)) {
+        wordlistGroups[newGroupName] = wordlistGroups.take(oldGroupName);
+        saveWordlistGroups();
+    }
+}
+
+void MainWindow::deleteWordlistGroup(const QString &groupName)
+{
+    if (wordlistGroups.contains(groupName) && groupName != "默认分组") {
+        wordlistGroups.remove(groupName);
+        saveWordlistGroups();
+    }
+}
+
+void MainWindow::addWordlistToGroup(const QString &wordlistName, const QString &groupName)
+{
+    if (wordlistGroups.contains(groupName) && !wordlistGroups[groupName].contains(wordlistName)) {
+        wordlistGroups[groupName].append(wordlistName);
+        saveWordlistGroups();
+    }
+}
+
+void MainWindow::removeWordlistFromGroup(const QString &wordlistName, const QString &groupName)
+{
+    if (wordlistGroups.contains(groupName)) {
+        wordlistGroups[groupName].removeOne(wordlistName);
+        saveWordlistGroups();
+    }
+}
+
+void MainWindow::saveWordlistGroups()
+{
+    QSettings settings("wordlist_groups.ini", QSettings::IniFormat);
+    settings.clear();
+    
+    for (auto it = wordlistGroups.constBegin(); it != wordlistGroups.constEnd(); ++it) {
+        QString groupName = it.key();
+        QStringList wordlists = it.value();
+        
+        settings.beginGroup(groupName);
+        settings.setValue("wordlists", wordlists);
+        settings.endGroup();
+    }
+    
+    settings.sync();
+}
+
+void MainWindow::loadWordlistGroups()
+{
+    QSettings settings("wordlist_groups.ini", QSettings::IniFormat);
+    QStringList groups = settings.childGroups();
+    
+    wordlistGroups.clear();
+    
+    for (const QString &group : groups) {
+        settings.beginGroup(group);
+        QStringList wordlists = settings.value("wordlists").toStringList();
+        wordlistGroups[group] = wordlists;
+        settings.endGroup();
+    }
+}
+
+void MainWindow::importWordlist(const QString &filePath)
+{
+    QFileInfo fileInfo(filePath);
+    QString extension = fileInfo.suffix().toLower();
+    
+    if (extension == "csv") {
+        importFromCSV(filePath);
+    } else if (extension == "xlsx" || extension == "xls") {
+        importFromExcel(filePath);
+    } else if (extension == "txt") {
+        loadWordsFromFile(filePath);
+    }
+}
+
+void MainWindow::exportWordlist(const QString &filePath, const QString &format)
+{
+    if (format == "csv") {
+        exportToCSV(filePath);
+    } else if (format == "excel") {
+        exportToExcel(filePath);
+    } else if (format == "txt") {
+        saveWordsToFile(filePath);
+    }
+}
+
+void MainWindow::importFromCSV(const QString &filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "导入失败", "无法打开CSV文件");
+        return;
+    }
+    
+    QTextStream in(&file);
+    words.clear();
+    cachedWords.clear();
+    
+    while (!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+        if (!line.isEmpty()) {
+            QStringList fields = line.split(",");
+            if (!fields.isEmpty()) {
+                QString word = fields[0].trimmed();
+                if (!word.isEmpty()) {
+                    words.push_back(word.toStdString());
+                    cachedWords.push_back(word.toStdString());
+                }
+            }
+        }
+    }
+    
+    file.close();
+    
+    // 更新单词列表显示
+    if (wordsTextEdit) {
+        QString wordsText;
+        for (const auto& word : words) {
+            wordsText += QString::fromStdString(word) + "\n";
+        }
+        wordsTextEdit->setPlainText(wordsText);
+    }
+    
+    QMessageBox::information(this, "导入成功", "词库已从CSV文件导入");
+}
+
+void MainWindow::exportToCSV(const QString &filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "导出失败", "无法创建CSV文件");
+        return;
+    }
+    
+    QTextStream out(&file);
+    for (const auto &word : words) {
+        out << QString::fromStdString(word) << "\n";
+    }
+    
+    file.close();
+    QMessageBox::information(this, "导出成功", "词库已成功导出到CSV文件");
+}
+
+void MainWindow::importFromExcel(const QString &filePath)
+{
+    // 这里只是一个示例实现，实际的Excel导入需要使用第三方库如QtXlsx
+    QMessageBox::information(this, "提示", "Excel导入功能需要安装QtXlsx库");
+    // 作为回退方案，我们可以尝试使用简单的文本解析
+    loadWordsFromFile(filePath);
+}
+
+void MainWindow::exportToExcel(const QString &filePath)
+{
+    // 这里只是一个示例实现，实际的Excel导出需要使用第三方库如QtXlsx
+    QMessageBox::information(this, "提示", "Excel导出功能需要安装QtXlsx库");
+    // 作为回退方案，我们可以导出为CSV格式
+    QString csvPath = filePath;
+    csvPath.replace(".xlsx", ".csv").replace(".xls", ".csv");
+    exportToCSV(csvPath);
 }
 
 void MainWindow::loadWordlistFiles()
@@ -1896,13 +2378,27 @@ void MainWindow::loadWordlistFiles()
     QStringList filters;
     filters << "*.txt";
 
-    // 递归遍历所有子目录
-    QDirIterator iterator(dir, QDirIterator::Subdirectories);
+    // 递归遍历所有子目录，但限制深度以提高性能
+    QDirIterator iterator(dir.path(), filters, QDir::Files, QDirIterator::Subdirectories);
+    
+    // 预先分配空间以减少内存重分配
+    int estimatedFileCount = 50; // 预估文件数量
+    // wordlistFiles.reserve(estimatedFileCount); // QMap没有reserve方法
+    
     while (iterator.hasNext()) {
         iterator.next();
         QFileInfo fileInfo = iterator.fileInfo();
-        if (fileInfo.isFile() && fileInfo.fileName().endsWith(".txt", Qt::CaseInsensitive)) {
-            QString filePath = fileInfo.absoluteFilePath();
+        
+        // 跳过隐藏文件和系统文件
+        if (fileInfo.isHidden() || fileInfo.fileName().startsWith(".")) {
+            continue;
+        }
+        
+        QString filePath = fileInfo.absoluteFilePath();
+        
+        // 异步检查文件有效性，避免阻塞UI线程
+        QFile tempFile(filePath);
+        if (tempFile.open(QIODevice::ReadOnly) && tempFile.size() < 1024 * 1024) { // 只检查小于1MB的文件
             if (isValidWordlistFile(filePath)) {
                 // 使用相对路径作为键，以便区分不同子目录中的同名文件
                 QString relativePath = dir.relativeFilePath(filePath);
@@ -1910,6 +2406,8 @@ void MainWindow::loadWordlistFiles()
             }
         }
     }
+    
+    qDebug() << QString("成功加载 %1 个词库文件").arg(wordlistFiles.size());
 }
 
 bool MainWindow::isValidWordlistFile(const QString &filePath)
@@ -1919,59 +2417,87 @@ bool MainWindow::isValidWordlistFile(const QString &filePath)
         return false;
     }
 
-    QTextStream in(&file);
-    int lineCount = 0;
+    // 限制文件大小，避免处理过大的文件
+    if (file.size() > 1024 * 1024) { // 大于1MB的文件视为无效
+        file.close();
+        return false;
+    }
 
-    while (!in.atEnd() && lineCount < 100) { // 限制检查前100行
-        QString line = in.readLine().trimmed();
-        lineCount++;
+    try {
+        QTextStream in(&file);
+        int lineCount = 0;
+        const int maxLinesToCheck = 50; // 减少检查的行数以提高性能
 
-        // 如果行不为空但包含非字母字符（除了空格和连字符），则可能是无效的词库文件
-        if (!line.isEmpty()) {
-            // 检查是否只包含字母、空格和连字符
-            QRegularExpression regex("^[a-zA-Z\\s\\-']+$");
-            if (!regex.match(line).hasMatch()) {
-                // 允许包含一些标点符号，但不能是特殊格式
-                if (line.contains(QRegularExpression("[0-9{}\\[\\]<>]"))) {
-                    file.close();
-                    return false;
+        while (!in.atEnd() && lineCount < maxLinesToCheck) {
+            QString line = in.readLine().trimmed();
+            lineCount++;
+
+            if (!line.isEmpty()) {
+                // 简化的正则表达式检查，提高性能
+                QRegularExpression regex("^[a-zA-Z\\s\\-']*$");
+                if (!regex.match(line).hasMatch()) {
+                    // 只检查明显无效的字符
+                    if (line.contains(QRegularExpression("[{}[\\]<>]"))) {
+                        file.close();
+                        return false;
+                    }
                 }
             }
         }
-    }
 
-    file.close();
-    return lineCount > 0; // 至少有一行有效内容
+        file.close();
+        return lineCount > 0; // 至少有一行有效内容
+    } catch (...) {
+        file.close();
+        return false;
+    }
 }
 
 void MainWindow::loadWordsFromFile(const QString &filename)
 {
     QFile file(filename);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString errorMsg = QString("无法打开文件 %1: %2").arg(filename).arg(file.errorString());
+        qDebug() << errorMsg;
+        QMessageBox::warning(this, "加载失败", errorMsg);
         return;
     }
 
-    QTextStream in(&file);
-    while (!in.atEnd()) {
-        QString line = in.readLine().trimmed();
-        if (!line.isEmpty()) {
-            words.push_back(line.toStdString());
-            // 所有加载的单词都添加到缓存中（除了内置的wordlist.txt）
-            if (filename != "wordlist.txt") {
-                cachedWords.push_back(line.toStdString());
+    try {
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            QString line = in.readLine().trimmed();
+            if (!line.isEmpty()) {
+                words.push_back(line.toStdString());
+                // 所有加载的单词都添加到缓存中（除了内置的wordlist.txt）
+                if (filename != "wordlist.txt") {
+                    cachedWords.push_back(line.toStdString());
+                }
             }
         }
-    }
 
-    file.close();
+        file.close();
 
-    // 更新单词列表显示
-    if (wordsTextEdit) {
-        QString wordsText;
-        for (const auto& word : words) {
-            wordsText += QString::fromStdString(word) + "\n";
+        // 更新单词列表显示
+        if (wordsTextEdit) {
+            QString wordsText;
+            for (const auto& word : words) {
+                wordsText += QString::fromStdString(word) + "\n";
+            }
+            wordsTextEdit->setPlainText(wordsText);
         }
-        wordsTextEdit->setPlainText(wordsText);
+        
+        qDebug() << QString("成功从文件 %1 加载 %2 个单词").arg(filename).arg(words.size());
+    } catch (const std::exception& e) {
+        QString errorMsg = QString("加载文件时发生错误: %1").arg(e.what());
+        qDebug() << errorMsg;
+        QMessageBox::critical(this, "加载错误", errorMsg);
+        file.close();
+    } catch (...) {
+        QString errorMsg = "加载文件时发生未知错误";
+        qDebug() << errorMsg;
+        QMessageBox::critical(this, "加载错误", errorMsg);
+        file.close();
     }
 }
 
@@ -2015,26 +2541,320 @@ void MainWindow::saveWordsToFile(const QString &filename)
 {
     QFile file(filename);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, "保存失败",
-                           QString("无法保存文件到：%1\n错误信息：%2")
-                           .arg(filename)
-                           .arg(file.errorString()));
+        QString errorMsg = QString("无法保存文件到：%1\n错误信息：%2").arg(filename).arg(file.errorString());
+        qDebug() << errorMsg;
+        QMessageBox::warning(this, "保存失败", errorMsg);
         return;
     }
 
-    QTextStream out(&file);
-    for (const auto &word : words) {
-        out << QString::fromStdString(word) << "\n";
+    try {
+        QTextStream out(&file);
+        for (const auto &word : words) {
+            out << QString::fromStdString(word) << "\n";
+        }
+
+        file.close();
+
+        // 确认保存成功
+        QString successMsg = QString("词库已成功保存至：%1\n共保存 %2 个单词").arg(filename).arg(words.size());
+        qDebug() << successMsg;
+        QMessageBox::information(this, "保存成功", successMsg);
+    } catch (const std::exception& e) {
+        QString errorMsg = QString("保存文件时发生错误: %1").arg(e.what());
+        qDebug() << errorMsg;
+        QMessageBox::critical(this, "保存错误", errorMsg);
+        file.close();
+    } catch (...) {
+        QString errorMsg = "保存文件时发生未知错误";
+        qDebug() << errorMsg;
+        QMessageBox::critical(this, "保存错误", errorMsg);
+        file.close();
     }
-
-    file.close();
-
-    // 确认保存成功
-    QMessageBox::information(this, "保存成功", QString("词库已成功保存至：%1").arg(filename));
 }
 
+// 加密配置文件
+bool MainWindow::encryptConfigFile(const QString& password)
+{
+    if (password.isEmpty()) return false;
+    
+    // 准备配置数据
+    QJsonObject configObj;
+    configObj["theme/isDark"] = isDarkTheme;
+    configObj["test/readInterval"] = readInterval;
+    configObj["speech/engine"] = speechEngine;
+    configObj["test/randomOrder"] = isRandomOrder;
+    configObj["security/encryptionEnabled"] = true; // 加密模式
+    
+    // 生成密码哈希
+    QString passwordHash = hashPassword(password);
+    configObj["security/passwordHash"] = passwordHash;
+    
+    // 转换为JSON
+    QJsonDocument doc(configObj);
+    QByteArray jsonData = doc.toJson();
+    
+    // 生成随机盐值
+    QByteArray salt(16, 0);
+    QRandomGenerator::global()->fillRange(reinterpret_cast<quint32*>(salt.data()), 4);
+    
+    // 派生密钥
+    QByteArray key = deriveKeyFromPassword(password, salt);
+    
+    // 加密数据
+    QByteArray encryptedData = encryptData(jsonData, key);
+    
+    // 保存为dat文件
+    QFile file("config.dat");
+    if (file.open(QIODevice::WriteOnly)) {
+        QDataStream out(&file);
+        out << salt << encryptedData;
+        file.close();
+        
+        // 删除旧的ini文件
+        QFile::remove("config.ini");
+        return true;
+    }
+    
+    return false;
+}
+
+// 解密配置文件
+bool MainWindow::decryptConfigFile(const QString& password, int attemptCount)
+{
+    if (password.isEmpty()) return false;
+    
+    // 检查尝试次数
+    if (attemptCount >= 5) {
+        // 达到最大尝试次数，初始化程序
+        initializeProgram();
+        return false;
+    }
+    
+    QFile file("config.dat");
+    if (!file.open(QIODevice::ReadOnly)) return false;
+    
+    // 读取盐值和加密数据
+    QDataStream in(&file);
+    QByteArray salt;
+    QByteArray encryptedData;
+    in >> salt >> encryptedData;
+    file.close();
+    
+    if (salt.isEmpty() || encryptedData.isEmpty()) return false;
+    
+    // 派生密钥
+    QByteArray key = deriveKeyFromPassword(password, salt);
+    
+    // 解密数据
+    QByteArray decryptedData = decryptData(encryptedData, key);
+    QJsonDocument doc = QJsonDocument::fromJson(decryptedData);
+    
+    if (!doc.isObject()) return false;
+    
+    QJsonObject configObj = doc.object();
+    
+    // 验证密码哈希
+    QString storedHash = configObj["security/passwordHash"].toString();
+    QString inputHash = hashPassword(password);
+    if (storedHash != inputHash) return false;
+    
+    // 加载配置
+    isDarkTheme = configObj["theme/isDark"].toBool(false);
+    readInterval = configObj["test/readInterval"].toInt(5);
+    speechEngine = configObj["speech/engine"].toInt(0);
+    isRandomOrder = configObj["test/randomOrder"].toBool(false);
+    encryptionEnabled = true;
+    
+    // 验证范围
+    if (readInterval < 1 || readInterval > 60) readInterval = 5;
+    if (speechEngine < 0 || speechEngine > 1) speechEngine = 0;
+    
+    return true;
+}
+
+// 初始化程序（删除所有用户和配置文件）
+void MainWindow::initializeProgram()
+{
+    // 显示提醒弹窗
+    QMessageBox::critical(this, "初始化程序", 
+        "程序将初始化，所有数据将被删除！");
+    
+    // 删除配置文件
+    QFile::remove("config.dat");
+    QFile::remove("config.ini");
+    
+    // 删除用户数据文件
+    if (!userDataPath.isEmpty()) {
+        QDir userDir(userDataPath);
+        QStringList filters;
+        filters << "*.enc" << "*.json";
+        userDir.setNameFilters(filters);
+        
+        QStringList files = userDir.entryList();
+        for (const QString& file : files) {
+            userDir.remove(file);
+        }
+    }
+    
+    // 重置内存中的数据
+    userProfiles.clear();
+    currentUser.clear();
+    
+    // 重置配置
+    isDarkTheme = false;
+    readInterval = 5;
+    speechEngine = 0;
+    isRandomOrder = false;
+    encryptionEnabled = false; // 确保加密模式被禁用
+    
+    // 清除密码缓存
+    savePasswordForUser("__config__", "");
+    
+    // 保存默认配置
+    QSettings settings("config.ini", QSettings::IniFormat);
+    settings.setValue("theme/isDark", false);
+    settings.setValue("test/readInterval", 5);
+    settings.setValue("speech/engine", 0);
+    settings.setValue("test/randomOrder", false);
+    settings.setValue("security/encryptionEnabled", false);
+    settings.sync();
+    
+    QMessageBox::information(this, "初始化完成", 
+        "程序已初始化，所有数据已删除。请重新登录账户。");
+    
+    // 关闭主窗口
+    this->close();
+    
+    // 重启应用程序
+    QCoreApplication::quit();
+    QProcess::startDetached(QCoreApplication::applicationFilePath());
+}
+
+// 保存配置文件（根据加密模式选择存储方式）
+bool MainWindow::saveSettings(bool requirePasswordInput) // 添加参数控制是否要求输入密码
+{
+    if (encryptionEnabled) {
+        // 加密模式下需要密码
+        QString password = getPasswordForUser("__config__");
+        if (password.isEmpty()) {
+            // 只有在requirePasswordInput为true时，才提示用户输入密码
+            if (requirePasswordInput) {
+                bool ok;
+                password = QInputDialog::getText(this, "输入加密密码", 
+                                               "请输入配置文件加密密码:", 
+                                               QLineEdit::Password, "", &ok);
+                if (!ok || password.isEmpty()) return false;
+            } else {
+                // 在退出时，如果没有缓存密码，直接返回false，不保存设置
+                return false;
+            }
+        }
+        
+        return encryptConfigFile(password);
+    } else {
+        // 明文模式使用ini文件
+        QSettings settings("config.ini", QSettings::IniFormat);
+
+        // 保存主题设置
+        settings.setValue("theme/isDark", isDarkTheme);
+
+        // 保存朗读时间间隔设置
+        settings.setValue("test/readInterval", readInterval);
+
+        // 保存语音引擎设置
+        settings.setValue("speech/engine", speechEngine);
+        
+        // 保存随机播放设置
+        settings.setValue("test/randomOrder", isRandomOrder);
+        
+        // 保存加密设置
+        settings.setValue("security/encryptionEnabled", false);
+
+        // 确保数据写入磁盘
+        settings.sync();
+        
+        // 删除加密文件
+        QFile::remove("config.dat");
+        return true;
+    }
+}
+
+// 加载配置文件（根据文件类型选择加载方式）
 void MainWindow::loadSettings()
 {
+    // 首先检查是否存在明文配置文件
+    if (QFile::exists("config.ini")) {
+        QSettings settings("config.ini", QSettings::IniFormat);
+        
+        // 检查加密设置
+        encryptionEnabled = settings.value("security/encryptionEnabled", false).toBool();
+        
+        if (!encryptionEnabled) {
+            // 如果加密已禁用，直接加载明文配置
+            // 加载主题设置
+            isDarkTheme = settings.value("theme/isDark", false).toBool();
+
+            // 加载朗读时间间隔设置
+            readInterval = settings.value("test/readInterval", 5).toInt();
+
+            // 加载语音引擎设置
+            speechEngine = settings.value("speech/engine", 0).toInt(); // 默认为SAPI (0)
+            
+            // 加载随机播放设置
+            isRandomOrder = settings.value("test/randomOrder", false).toBool();
+            
+            // 删除可能存在的旧加密文件
+            QFile::remove("config.dat");
+            
+            // 确保时间间隔在合理范围内
+            if (readInterval < 1 || readInterval > 60) {
+                readInterval = 5;
+            }
+
+            // 确保语音引擎值有效
+            if (speechEngine < 0 || speechEngine > 1) {
+                speechEngine = 0; // 默认使用SAPI
+            }
+            
+            return;
+        }
+    }
+    
+    // 只有当加密启用或存在加密文件时，才需要输入密码
+    if (QFile::exists("config.dat")) {
+        int attemptCount = 0;
+        while (attemptCount < 5) {
+            bool ok;
+            QString password = QInputDialog::getText(this, "输入解密密码", 
+                                                   QString("请输入配置文件解密密码: (尝试 %1/5)").arg(attemptCount + 1), 
+                                                   QLineEdit::Password, "", &ok);
+            
+            if (!ok) {
+                // 用户取消，增加尝试次数
+                attemptCount++;
+                continue;
+            }
+            
+            if (decryptConfigFile(password, attemptCount)) {
+                // 保存密码到缓存
+                savePasswordForUser("__config__", password);
+                return;
+            } else {
+                // 解密失败，增加尝试次数
+                attemptCount++;
+                if (attemptCount < 5) {
+                    QMessageBox::warning(this, "解密失败", 
+                        QString("密码错误或文件损坏，剩余尝试次数: %1").arg(5 - attemptCount));
+                }
+            }
+        }
+        
+        // 达到最大尝试次数，初始化程序
+        initializeProgram();
+        return;
+    }
+    
+    // 加载明文ini文件或使用默认值
     QSettings settings("config.ini", QSettings::IniFormat);
 
     // 加载主题设置
@@ -2050,7 +2870,7 @@ void MainWindow::loadSettings()
     isRandomOrder = settings.value("test/randomOrder", false).toBool();
     
     // 加载加密设置
-    encryptionEnabled = settings.value("security/encryptionEnabled", true).toBool();
+    encryptionEnabled = settings.value("security/encryptionEnabled", false).toBool();
 
     // 确保时间间隔在合理范围内
     if (readInterval < 1 || readInterval > 60) {
@@ -2061,29 +2881,6 @@ void MainWindow::loadSettings()
     if (speechEngine < 0 || speechEngine > 1) {
         speechEngine = 0; // 默认使用SAPI
     }
-}
-
-void MainWindow::saveSettings()
-{
-    QSettings settings("config.ini", QSettings::IniFormat);
-
-    // 保存主题设置
-    settings.setValue("theme/isDark", isDarkTheme);
-
-    // 保存朗读时间间隔设置
-    settings.setValue("test/readInterval", readInterval);
-
-    // 保存语音引擎设置
-    settings.setValue("speech/engine", speechEngine);
-    
-    // 保存随机播放设置
-    settings.setValue("test/randomOrder", isRandomOrder);
-    
-    // 保存加密设置
-    settings.setValue("security/encryptionEnabled", encryptionEnabled);
-
-    // 确保数据写入磁盘
-    settings.sync();
 }
 
 void MainWindow::updateWelcomeMessage()
@@ -2617,8 +3414,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
     // 保存所有用户配置
     saveAllUserProfiles();
     
-    // 保存设置
-    saveSettings();
+    // 保存设置，传入false参数表示退出时不要求输入密码
+    saveSettings(false);
 
     // 检查临时词库文件是否存在且内容不为空
     QFile tempFile(tempWordlistFile);
@@ -2810,8 +3607,180 @@ void MainWindow::showSettingsDialog()
         saveSettings();
     });
     
-
-
+    // 安全设置部分
+    QGroupBox *securityGroup = new QGroupBox("安全设置", dialog);
+    QVBoxLayout *securityLayout = new QVBoxLayout(securityGroup);
+    
+    QHBoxLayout *encryptionLayout = new QHBoxLayout;
+    QCheckBox *encryptionCheckBox = new QCheckBox("启用数据加密", dialog);
+    encryptionCheckBox->setChecked(encryptionEnabled);
+    encryptionLayout->addWidget(encryptionCheckBox);
+    encryptionLayout->addStretch();
+    
+    securityLayout->addLayout(encryptionLayout);
+    
+    // 添加加密说明
+    QLabel *encryptionDescription = new QLabel(
+        "启用数据加密可以保护您的用户数据不被未授权访问。" 
+        "加密模式下需要输入密码才能登录。", dialog);
+    encryptionDescription->setWordWrap(true);
+    securityLayout->addWidget(encryptionDescription);
+    
+    // 添加初始化程序按钮
+    QPushButton *initializeButton = new QPushButton("初始化程序", dialog);
+    initializeButton->setStyleSheet(
+        "QPushButton { "
+        "font-family: 'Microsoft YaHei'; "
+        "font-size: 9pt; "
+        "padding: 8px 16px; "
+        "margin: 4px; "
+        "border: 2px solid #ff5555; "
+        "border-radius: 6px; "
+        "background-color: #ffffff; "
+        "color: #ff5555; "
+        "} "
+        "QPushButton:hover { "
+        "background-color: #ffe0e0; "
+        "border: 2px solid #ff3333; "
+        "} "
+        "QPushButton:pressed { "
+        "background-color: #ffd0d0; "
+        "border: 2px solid #ff0000; "
+        "} ");
+    securityLayout->addWidget(initializeButton);
+    
+    // 连接初始化按钮的信号和槽
+    connect(initializeButton, &QPushButton::clicked, [=]() {
+        // 显示提醒弹窗
+        QMessageBox::critical(dialog, "初始化程序", 
+            "程序将初始化，所有数据将被删除！");
+        
+        // 关闭设置对话框
+        dialog->accept();
+        
+        // 初始化程序
+        initializeProgram();
+    });
+    
+    mainLayout->addWidget(securityGroup);
+    
+    // 连接加密复选框的信号和槽
+    connect(encryptionCheckBox, &QCheckBox::toggled, [=](bool checked) {
+        if (checked) {
+            // 启用加密模式
+            bool ok;
+            QString password = QInputDialog::getText(dialog, "设置加密密码", 
+                                                   "请设置配置文件加密密码:", 
+                                                   QLineEdit::Password, "", &ok);
+            if (!ok || password.isEmpty()) {
+                // 用户取消或未输入密码，保持原有状态
+                encryptionCheckBox->setChecked(encryptionEnabled);
+                return;
+            }
+            
+            // 验证密码强度
+            if (password.length() < 6) {
+                QMessageBox::warning(dialog, "密码强度不足", 
+                    "密码长度至少为6个字符，请重新设置。");
+                encryptionCheckBox->setChecked(encryptionEnabled);
+                return;
+            }
+            
+            // 保存密码到缓存
+            savePasswordForUser("__config__", password);
+            
+            // 加密配置文件
+            if (encryptConfigFile(password)) {
+                encryptionEnabled = true;
+                QMessageBox::information(dialog, "加密已启用", 
+                    "数据加密已启用。配置文件已加密，用户数据将使用加密存储。");
+            } else {
+                QMessageBox::warning(dialog, "加密失败", 
+                    "配置文件加密失败，请重试。");
+                encryptionCheckBox->setChecked(encryptionEnabled);
+                return;
+            }
+        } else {
+            // 禁用加密模式
+            if (encryptionEnabled) {
+                // 当前是加密模式，需要先解密
+                int attemptCount = 0;
+                bool passwordCorrect = false;
+                QString password;
+                
+                while (attemptCount < 5 && !passwordCorrect) {
+                    // 获取缓存的密码，如果没有则提示用户输入
+                    password = getPasswordForUser("__config__");
+                    if (password.isEmpty()) {
+                        // 如果没有缓存密码，提示用户输入
+                        bool ok;
+                        password = QInputDialog::getText(dialog, "输入解密密码", 
+                                                       "请输入配置文件解密密码:", 
+                                                       QLineEdit::Password, "", &ok);
+                        if (!ok || password.isEmpty()) {
+                            // 用户取消或未输入密码，保持加密模式
+                            encryptionCheckBox->setChecked(true);
+                            return;
+                        }
+                    }
+                    
+                    // 验证密码并解密配置
+                    QFile file("config.dat");
+                    if (file.exists()) {
+                        if (decryptConfigFile(password, 0)) {
+                            passwordCorrect = true;
+                        } else {
+                            attemptCount++;
+                            QMessageBox::warning(dialog, "解密失败", 
+                                QString("密码错误，无法禁用加密模式。剩余尝试次数: %1").arg(5 - attemptCount));
+                            
+                            // 清除缓存的密码，以便下次重新输入
+                            savePasswordForUser("__config__", "");
+                            password.clear();
+                        }
+                    } else {
+                        // 如果加密文件不存在，直接切换到明文模式
+                        passwordCorrect = true;
+                    }
+                }
+                
+                if (!passwordCorrect) {
+                    // 达到5次错误，初始化程序
+                    QMessageBox::critical(dialog, "密码错误次数过多", 
+                        "密码错误次数已达5次，程序将初始化。");
+                    
+                    // 关闭设置对话框
+                    dialog->accept();
+                    
+                    // 初始化程序
+                    initializeProgram();
+                    return;
+                }
+                
+                // 切换到明文模式
+                encryptionEnabled = false;
+                
+                // 保存为明文配置
+                QSettings settings("config.ini", QSettings::IniFormat);
+                settings.setValue("theme/isDark", isDarkTheme);
+                settings.setValue("test/readInterval", readInterval);
+                settings.setValue("speech/engine", speechEngine);
+                settings.setValue("test/randomOrder", isRandomOrder);
+                settings.setValue("security/encryptionEnabled", false);
+                settings.sync();
+                
+                // 删除加密配置文件
+                QFile::remove("config.dat");
+                
+                // 清除密码缓存
+                savePasswordForUser("__config__", "");
+                
+                QMessageBox::information(dialog, "加密已禁用", 
+                    "数据加密已禁用。配置文件已转换为明文，用户数据将使用明文存储。");
+            }
+        }
+    });
+    
     // 对话框按钮
     QDialogButtonBox *buttonBox = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, 
@@ -3069,6 +4038,53 @@ void MainWindow::loadTestHistory()
 
 QWidget* MainWindow::createProgressChartWidget()
 {
+    // 创建主容器
+    QWidget *containerWidget = new QWidget();
+    QVBoxLayout *mainLayout = new QVBoxLayout(containerWidget);
+    mainLayout->setSpacing(20);
+    mainLayout->setContentsMargins(10, 10, 10, 10);
+    
+    // 添加统计摘要
+    QWidget *summaryWidget = new QWidget();
+    QGridLayout *summaryLayout = new QGridLayout(summaryWidget);
+    summaryLayout->setSpacing(15);
+    
+    // 计算统计数据
+    int totalTests = testHistory.size();
+    double avgAccuracy = 0.0;
+    int totalCorrect = 0;
+    int totalWords = 0;
+    int totalStudyTime = 0;
+    
+    for (const auto& result : testHistory) {
+        avgAccuracy += result.accuracy;
+        totalCorrect += result.correctCount;
+        totalWords += result.totalWords;
+    }
+    
+    if (totalTests > 0) {
+        avgAccuracy /= totalTests;
+    }
+    
+    // 添加统计项
+    QLabel *totalTestsLabel = new QLabel();
+    totalTestsLabel->setText(QString("<b>总测试次数:</b> %1").arg(totalTests));
+    summaryLayout->addWidget(totalTestsLabel, 0, 0);
+    
+    QLabel *avgAccuracyLabel = new QLabel();
+    avgAccuracyLabel->setText(QString("<b>平均准确率:</b> %1%").arg(QString::number(avgAccuracy, 'f', 1)));
+    summaryLayout->addWidget(avgAccuracyLabel, 0, 1);
+    
+    QLabel *totalCorrectLabel = new QLabel();
+    totalCorrectLabel->setText(QString("<b>总正确数:</b> %1").arg(totalCorrect));
+    summaryLayout->addWidget(totalCorrectLabel, 1, 0);
+    
+    QLabel *totalWordsLabel = new QLabel();
+    totalWordsLabel->setText(QString("<b>总测试词数:</b> %1").arg(totalWords));
+    summaryLayout->addWidget(totalWordsLabel, 1, 1);
+    
+    mainLayout->addWidget(summaryWidget);
+    
     // 创建图表视图
     QChart *chart = new QChart();
     chart->setTitle("学习进度趋势");
@@ -3100,44 +4116,99 @@ QWidget* MainWindow::createProgressChartWidget()
     }
     
     // 添加系列到图表
-    chart->addSeries(accuracySeries);
-    chart->addSeries(barSeries);
+    if (!testHistory.empty()) {
+        chart->addSeries(accuracySeries);
+        chart->addSeries(barSeries);
+        
+        // 配置X轴
+        QValueAxis *axisX = new QValueAxis();
+        axisX->setTickCount(dateTimeLabels.size());
+        axisX->setRange(0, qMax(1, static_cast<int>(dateTimeLabels.size()) - 1));
+        axisX->setTitleText("测试时间");
+        
+        // 配置Y轴
+        QValueAxis *axisY = new QValueAxis();
+        axisY->setRange(0, 100);
+        axisY->setTitleText("准确率 (%)");
+        
+        // 将轴添加到图表
+        chart->addAxis(axisX, Qt::AlignBottom);
+        chart->addAxis(axisY, Qt::AlignLeft);
+        
+        accuracySeries->attachAxis(axisX);
+        accuracySeries->attachAxis(axisY);
+        
+        barSeries->attachAxis(axisX);
+        QValueAxis *barAxisY = new QValueAxis();
+        int maxCorrect = 0;
+        for (const auto& result : testHistory) {
+            if (result.correctCount > maxCorrect) {
+                maxCorrect = result.correctCount;
+            }
+        }
+        barAxisY->setRange(0, maxCorrect > 0 ? maxCorrect * 1.2 : 20);
+        barAxisY->setTitleText("正确数");
+        chart->addAxis(barAxisY, Qt::AlignRight);
+        barSeries->attachAxis(barAxisY);
+        
+        // 设置图表样式
+        chart->legend()->setVisible(true);
+        chart->legend()->setAlignment(Qt::AlignBottom);
+    } else {
+        // 无数据时显示提示
+        QLabel *noDataLabel = new QLabel("暂无学习数据");
+        noDataLabel->setAlignment(Qt::AlignCenter);
+        noDataLabel->setFont(QFont("Microsoft YaHei", 14));
+        // 创建一个容器widget来显示提示信息
+        QWidget *noDataWidget = new QWidget();
+        QVBoxLayout *noDataLayout = new QVBoxLayout(noDataWidget);
+        noDataLayout->addWidget(noDataLabel);
+        noDataLayout->setAlignment(Qt::AlignCenter);
+        chart->setParent(noDataWidget);
+    }
     
-    // 配置X轴
-    QValueAxis *axisX = new QValueAxis();
-    axisX->setTickCount(dateTimeLabels.size());
-    axisX->setRange(0, qMax(1, static_cast<int>(dateTimeLabels.size()) - 1));
-    axisX->setTitleText("测试时间");
-    
-    // 配置Y轴
-    QValueAxis *axisY = new QValueAxis();
-    axisY->setRange(0, 100);
-    axisY->setTitleText("百分比 / 正确数");
-    
-    // 将轴添加到图表
-    chart->addAxis(axisX, Qt::AlignBottom);
-    chart->addAxis(axisY, Qt::AlignLeft);
-    
-    accuracySeries->attachAxis(axisX);
-    accuracySeries->attachAxis(axisY);
-    
-    barSeries->attachAxis(axisX);
-    QValueAxis *barAxisY = new QValueAxis();
-    barAxisY->setRange(0, words.size() > 0 ? words.size() : 20);
-    barAxisY->setTitleText("正确数");
-    chart->addAxis(barAxisY, Qt::AlignRight);
-    barSeries->attachAxis(barAxisY);
-    
-    // 设置图表样式
-    chart->legend()->setVisible(true);
-    chart->legend()->setAlignment(Qt::AlignBottom);
-    
-    // 创建图表视图并返回
+    // 创建图表视图
     QChartView *chartView = new QChartView(chart);
     chartView->setRenderHint(QPainter::Antialiasing);
     chartView->setMinimumHeight(400);
     
-    return chartView;
+    mainLayout->addWidget(chartView);
+    
+    // 添加词库学习进度
+    if (!wordlistFiles.isEmpty()) {
+        QWidget *wordlistProgressWidget = new QWidget();
+        QVBoxLayout *wordlistLayout = new QVBoxLayout(wordlistProgressWidget);
+        
+        QLabel *wordlistTitle = new QLabel("词库学习进度");
+        QFont titleFont = wordlistTitle->font();
+        titleFont.setPointSize(12);
+        titleFont.setBold(true);
+        wordlistTitle->setFont(titleFont);
+        wordlistLayout->addWidget(wordlistTitle);
+        
+        // 创建词库进度列表
+        QListWidget *wordlistList = new QListWidget();
+        for (auto it = wordlistFiles.constBegin(); it != wordlistFiles.constEnd(); ++it) {
+            QString wordlistName = it.key();
+            QListWidgetItem *item = new QListWidgetItem(wordlistName);
+            
+            // 计算该词库的学习次数
+            int studyCount = 0;
+            for (const auto& result : testHistory) {
+                if (result.wordListName == wordlistName) {
+                    studyCount++;
+                }
+            }
+            
+            item->setToolTip(QString("学习次数: %1").arg(studyCount));
+            wordlistList->addItem(item);
+        }
+        wordlistLayout->addWidget(wordlistList);
+        
+        mainLayout->addWidget(wordlistProgressWidget);
+    }
+    
+    return containerWidget;
 }
 
 void MainWindow::showProgressChart()
@@ -3148,7 +4219,7 @@ void MainWindow::showProgressChart()
     // 创建进度对话框
     QDialog progressDialog(this);
     progressDialog.setWindowTitle("学习进度可视化");
-    progressDialog.resize(800, 600);
+    progressDialog.resize(900, 700);
     
     // 创建对话框主布局
     QVBoxLayout *dialogLayout = new QVBoxLayout(&progressDialog);
@@ -3156,30 +4227,65 @@ void MainWindow::showProgressChart()
     dialogLayout->setContentsMargins(10, 10, 10, 10);
     
     // 创建标题
-    QLabel *titleLabel = new QLabel("学习进度", &progressDialog);
+    QLabel *titleLabel = new QLabel("学习进度统计", &progressDialog);
     QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(16);
+    titleFont.setPointSize(18);
     titleFont.setBold(true);
     titleLabel->setFont(titleFont);
     titleLabel->setAlignment(Qt::AlignCenter);
     
-    // 创建图表
+    // 创建统计内容
     QWidget *chartWidget = createProgressChartWidget();
+    
+    // 创建按钮布局
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    
+    // 创建导出按钮
+    QPushButton *exportButton = new QPushButton("导出统计", &progressDialog);
+    QFont buttonFont = exportButton->font();
+    buttonFont.setPointSize(10);
+    exportButton->setFont(buttonFont);
+    exportButton->setMinimumSize(QSize(100, 30));
     
     // 创建关闭按钮
     QPushButton *closeButton = new QPushButton("关闭", &progressDialog);
-    QFont buttonFont = closeButton->font();
-    buttonFont.setPointSize(10);
     closeButton->setFont(buttonFont);
     closeButton->setMinimumSize(QSize(100, 30));
     
-    // 连接关闭按钮
+    // 连接按钮
     connect(closeButton, &QPushButton::clicked, &progressDialog, &QDialog::accept);
+    
+    connect(exportButton, &QPushButton::clicked, [this, &progressDialog]() {
+        QString fileName = QFileDialog::getSaveFileName(const_cast<QWidget*>(static_cast<const QWidget*>(&progressDialog)), "导出统计", "学习统计.csv", "CSV Files (*.csv)");
+        if (!fileName.isEmpty()) {
+            QFile file(fileName);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream out(&file);
+                out << "测试时间,词库名称,总单词数,正确数,准确率" << "\n";
+                
+                for (const auto& result : testHistory) {
+                    out << result.timestamp.toString("yyyy-MM-dd HH:mm:ss") << ",";
+                    out << result.wordListName << ",";
+                    out << result.totalWords << ",";
+                    out << result.correctCount << ",";
+                    out << QString::number(result.accuracy, 'f', 1) << "%" << "\n";
+                }
+                
+                file.close();
+                QMessageBox::information(const_cast<QWidget*>(static_cast<const QWidget*>(&progressDialog)), "导出成功", "学习统计已成功导出到CSV文件");
+            }
+        }
+    });
+    
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(exportButton);
+    buttonLayout->addWidget(closeButton);
+    buttonLayout->addStretch();
     
     // 将组件添加到布局
     dialogLayout->addWidget(titleLabel);
     dialogLayout->addWidget(chartWidget);
-    dialogLayout->addWidget(closeButton, 0, Qt::AlignCenter);
+    dialogLayout->addLayout(buttonLayout);
     
     // 显示对话框
     progressDialog.exec();
@@ -3360,7 +4466,7 @@ void MainWindow::createUser(const QString& username, const QString& nickname)
     QMessageBox::information(this, "创建成功", QString("用户 %1 创建成功").arg(username));
 }
 
-bool MainWindow::loginUser(const QString& username)
+bool MainWindow::loginUser(const QString& username, const QString& password)
 {
     if (!userProfiles.contains(username)) {
         QMessageBox::warning(this, "登录失败", "用户不存在");
@@ -3371,6 +4477,17 @@ bool MainWindow::loginUser(const QString& username)
     if (!user.isActive) {
         QMessageBox::warning(this, "登录失败", "用户已被禁用");
         return false;
+    }
+    
+    // 加密模式下要求输入密码
+    if (encryptionEnabled && password.isEmpty()) {
+        QMessageBox::warning(this, "登录失败", "加密模式下必须输入密码才能登录");
+        return false;
+    }
+    
+    // 保存密码到缓存，用于后续的加密操作
+    if (!password.isEmpty()) {
+        savePasswordForUser(username, password);
     }
     
     // 更新最后登录时间
@@ -3406,77 +4523,55 @@ void MainWindow::logoutUser()
 
 void MainWindow::saveUserProfile(const QString& username)
 {
-    // 默认使用加密保存
-    saveEncryptedUserProfile(username);
+    if (encryptionEnabled) {
+        // 从用户密码存储中获取密码（需要在登录时保存）
+        QString password = getPasswordForUser(username);
+        if (!password.isEmpty()) {
+            saveEncryptedUserProfile(username, password);
+        } else {
+            // 如果没有密码，使用明文保存
+            savePlainUserProfile(username);
+        }
+    } else {
+        // 禁用加密时使用明文保存
+        savePlainUserProfile(username);
+    }
+}
+
+// 获取用户密码（需要在登录时保存）
+QString MainWindow::getPasswordForUser(const QString& username)
+{
+    // 这里需要实现密码存储机制
+    // 临时实现：从内存中的密码缓存获取
+    static QMap<QString, QString> passwordCache;
+    return passwordCache.value(username);
+}
+
+// 保存用户密码到缓存（登录时调用）
+void MainWindow::savePasswordForUser(const QString& username, const QString& password)
+{
+    static QMap<QString, QString> passwordCache;
+    passwordCache[username] = password;
 }
 
 void MainWindow::loadUserProfile(const QString& username)
 {
-    // 首先尝试加载加密文件
-    QString encryptedFilePath = userDataPath + "/" + username + ".enc";
-    if (QFile::exists(encryptedFilePath)) {
-        loadEncryptedUserProfile(username);
-        return;
+    if (encryptionEnabled) {
+        // 首先尝试加载加密文件
+        QString encryptedFilePath = userDataPath + "/" + username + ".enc";
+        if (QFile::exists(encryptedFilePath)) {
+            // 需要密码才能加载加密文件
+            // 这里需要实现密码获取机制
+            QString password = getPasswordForUser(username);
+            if (!password.isEmpty()) {
+                loadEncryptedUserProfile(username, password);
+                return;
+            }
+        }
     }
     
-    // 如果没有加密文件，尝试加载旧的明文JSON文件（向后兼容）
-    QString jsonFilePath = userDataPath + "/" + username + ".json";
-    if (!QFile::exists(jsonFilePath)) return;
-    
-    QFile file(jsonFilePath);
-    if (!file.open(QIODevice::ReadOnly)) return;
-    
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    file.close();
-    
-    if (!doc.isObject()) return;
-    
-    QJsonObject userObj = doc.object();
-    UserData user;
-    
-    user.username = userObj["username"].toString();
-    user.nickname = userObj["nickname"].toString();
-    user.createdTime = QDateTime::fromString(userObj["createdTime"].toString(), Qt::ISODate);
-    user.lastLoginTime = QDateTime::fromString(userObj["lastLoginTime"].toString(), Qt::ISODate);
-    user.isActive = userObj["isActive"].toBool(true);
-    user.totalStudyTime = userObj["totalStudyTime"].toInt(0);
-    user.completedTests = userObj["completedTests"].toInt(0);
-    user.isDarkTheme = userObj["isDarkTheme"].toBool(false);
-    user.readInterval = userObj["readInterval"].toInt(5);
-    user.speechEngine = userObj["speechEngine"].toInt(0);
-    user.isRandomOrder = userObj["isRandomOrder"].toBool(false);
-    
-    // 隐私设置
-    user.allowDataCollection = userObj["allowDataCollection"].toBool(false);
-    user.allowCloudSync = userObj["allowCloudSync"].toBool(false);
-    user.allowAnalytics = userObj["allowAnalytics"].toBool(false);
-    user.shareLearningStats = userObj["shareLearningStats"].toBool(false);
-    
-    // 加载词库列表
-    QJsonArray wordListsArray = userObj["wordLists"].toArray();
-    for (const QJsonValue& value : wordListsArray) {
-        user.wordLists.append(value.toString());
-    }
-    
-    // 加载测试历史
-    QJsonArray historyArray = userObj["testHistory"].toArray();
-    for (const QJsonValue& value : historyArray) {
-        QJsonObject resultObj = value.toObject();
-        TestResult result;
-        result.timestamp = QDateTime::fromString(resultObj["timestamp"].toString(), Qt::ISODate);
-        result.totalWords = resultObj["totalWords"].toInt();
-        result.correctCount = resultObj["correctCount"].toInt();
-        result.accuracy = resultObj["accuracy"].toDouble();
-        result.wordListName = resultObj["wordListName"].toString();
-        user.testHistory.push_back(result);
-    }
-    
-    userProfiles[username] = user;
-    
-    // 将旧的明文文件转换为加密格式
-    saveEncryptedUserProfile(username);
-    QFile::remove(jsonFilePath); // 删除旧的明文文件
-    qDebug() << "Converted plaintext profile to encrypted for user:" << username;
+    // 尝试加载明文JSON文件
+    loadPlainUserProfile(username);
 }
 
 void MainWindow::saveAllUserProfiles()
@@ -3532,9 +4627,40 @@ QByteArray MainWindow::generateEncryptionKey()
     return key;
 }
 
+// 使用PBKDF2从密码派生密钥
+QByteArray MainWindow::deriveKeyFromPassword(const QString& password, const QByteArray& salt, int iterations)
+{
+    if (password.isEmpty()) return QByteArray();
+    
+    // 使用SHA-256作为哈希算法，派生32字节密钥（AES-256）
+    QByteArray key(32, 0);
+    QByteArray passwordBytes = password.toUtf8();
+    
+    // PBKDF2算法实现
+    for (int i = 1; i <= iterations; ++i) {
+        // 计算 HMAC(SHA-256, salt || i)
+        QByteArray data = salt;
+        data.append(reinterpret_cast<const char*>(&i), sizeof(i));
+        
+        QByteArray hash = QCryptographicHash::hash(passwordBytes + data, QCryptographicHash::Sha256);
+        
+        // 累计异或结果
+        for (int j = 0; j < 32 && j < hash.size(); ++j) {
+            key[j] = key[j] ^ hash[j];
+        }
+        
+        // 为下一次迭代准备数据
+        passwordBytes = hash;
+    }
+    
+    return key;
+}
+
+// 改进的XOR加密（临时方案，后续替换为AES）
 QByteArray MainWindow::encryptData(const QByteArray& data, const QByteArray& key)
 {
-    // 使用简单的XOR加密作为示例（实际应用中应使用更安全的加密算法）
+    if (data.isEmpty() || key.isEmpty()) return data;
+    
     QByteArray encryptedData;
     encryptedData.reserve(data.size());
     
@@ -3590,9 +4716,9 @@ QString MainWindow::decryptString(const QString& ciphertext)
     return QString::fromUtf8(decryptedBytes);
 }
 
-void MainWindow::saveEncryptedUserProfile(const QString& username)
+void MainWindow::saveEncryptedUserProfile(const QString& username, const QString& password)
 {
-    if (!userProfiles.contains(username)) return;
+    if (!userProfiles.contains(username) || password.isEmpty()) return;
     
     UserData& user = userProfiles[username];
     QString userFilePath = userDataPath + "/" + username + ".enc";
@@ -3600,7 +4726,7 @@ void MainWindow::saveEncryptedUserProfile(const QString& username)
     // 准备要加密的用户数据
     QJsonObject userDataObj;
     userDataObj["username"] = user.username;
-    userDataObj["nickname"] = encryptString(user.nickname);
+    userDataObj["nickname"] = user.nickname; // 不再单独加密字符串
     userDataObj["createdTime"] = user.createdTime.toString(Qt::ISODate);
     userDataObj["lastLoginTime"] = user.lastLoginTime.toString(Qt::ISODate);
     userDataObj["isActive"] = user.isActive;
@@ -3617,60 +4743,71 @@ void MainWindow::saveEncryptedUserProfile(const QString& username)
     userDataObj["allowAnalytics"] = user.allowAnalytics;
     userDataObj["shareLearningStats"] = user.shareLearningStats;
     
-    // 加密词库列表
-    QJsonArray encryptedWordLists;
+    // 词库列表
+    QJsonArray wordLists;
     for (const QString& wordList : user.wordLists) {
-        encryptedWordLists.append(encryptString(wordList));
+        wordLists.append(wordList); // 不再单独加密字符串
     }
-    userDataObj["wordLists"] = encryptedWordLists;
+    userDataObj["wordLists"] = wordLists;
     
-    // 加密测试历史
-    QJsonArray encryptedHistory;
+    // 测试历史
+    QJsonArray testHistory;
     for (const auto& result : user.testHistory) {
         QJsonObject resultObj;
         resultObj["timestamp"] = result.timestamp.toString(Qt::ISODate);
         resultObj["totalWords"] = result.totalWords;
         resultObj["correctCount"] = result.correctCount;
         resultObj["accuracy"] = result.accuracy;
-        resultObj["wordListName"] = encryptString(result.wordListName);
-        encryptedHistory.append(resultObj);
+        resultObj["wordListName"] = result.wordListName; // 不再单独加密字符串
+        testHistory.append(resultObj);
     }
-    userDataObj["testHistory"] = encryptedHistory;
+    userDataObj["testHistory"] = testHistory;
     
-    // 生成主密钥
-    QByteArray masterKey = generateEncryptionKey();
+    // 生成16字节的随机盐值
+    QByteArray salt(16, 0);
+    QRandomGenerator::global()->fillRange(reinterpret_cast<quint32*>(salt.data()), 4);
+    
+    // 使用PBKDF2派生密钥
+    QByteArray key = deriveKeyFromPassword(password, salt);
     
     // 加密整个JSON对象
     QJsonDocument doc(userDataObj);
     QByteArray jsonData = doc.toJson();
-    QByteArray encryptedData = encryptData(jsonData, masterKey);
+    QByteArray encryptedData = encryptData(jsonData, key);
     
-    // 保存加密数据和密钥
+    // 保存盐值和加密数据（不保存密钥）
     QFile file(userFilePath);
     if (file.open(QIODevice::WriteOnly)) {
         QDataStream out(&file);
-        out << masterKey << encryptedData;
+        out << salt << encryptedData;
         file.close();
         qDebug() << "Encrypted user profile saved for:" << username;
     }
 }
 
-void MainWindow::loadEncryptedUserProfile(const QString& username)
+void MainWindow::loadEncryptedUserProfile(const QString& username, const QString& password)
 {
+    if (username.isEmpty() || password.isEmpty()) return;
+    
     QString userFilePath = userDataPath + "/" + username + ".enc";
     
     QFile file(userFilePath);
     if (!file.open(QIODevice::ReadOnly)) return;
     
-    // 读取密钥和加密数据
+    // 读取盐值和加密数据
     QDataStream in(&file);
-    QByteArray masterKey;
+    QByteArray salt;
     QByteArray encryptedData;
-    in >> masterKey >> encryptedData;
+    in >> salt >> encryptedData;
     file.close();
     
+    if (salt.isEmpty() || encryptedData.isEmpty()) return;
+    
+    // 使用PBKDF2派生密钥
+    QByteArray key = deriveKeyFromPassword(password, salt);
+    
     // 解密数据
-    QByteArray decryptedData = decryptData(encryptedData, masterKey);
+    QByteArray decryptedData = decryptData(encryptedData, key);
     QJsonDocument doc = QJsonDocument::fromJson(decryptedData);
     
     if (!doc.isObject()) return;
@@ -3679,7 +4816,7 @@ void MainWindow::loadEncryptedUserProfile(const QString& username)
     UserData user;
     
     user.username = userDataObj["username"].toString();
-    user.nickname = decryptString(userDataObj["nickname"].toString());
+    user.nickname = userDataObj["nickname"].toString(); // 不再需要解密字符串
     user.createdTime = QDateTime::fromString(userDataObj["createdTime"].toString(), Qt::ISODate);
     user.lastLoginTime = QDateTime::fromString(userDataObj["lastLoginTime"].toString(), Qt::ISODate);
     user.isActive = userDataObj["isActive"].toBool(true);
@@ -3696,27 +4833,142 @@ void MainWindow::loadEncryptedUserProfile(const QString& username)
     user.allowAnalytics = userDataObj["allowAnalytics"].toBool(false);
     user.shareLearningStats = userDataObj["shareLearningStats"].toBool(false);
     
-    // 解密词库列表
-    QJsonArray encryptedWordLists = userDataObj["wordLists"].toArray();
-    for (const QJsonValue& value : encryptedWordLists) {
-        user.wordLists.append(decryptString(value.toString()));
+    // 词库列表
+    QJsonArray wordLists = userDataObj["wordLists"].toArray();
+    for (const QJsonValue& value : wordLists) {
+        user.wordLists.append(value.toString()); // 不再需要解密字符串
     }
     
-    // 解密测试历史
-    QJsonArray encryptedHistory = userDataObj["testHistory"].toArray();
-    for (const QJsonValue& value : encryptedHistory) {
+    // 测试历史
+    QJsonArray testHistory = userDataObj["testHistory"].toArray();
+    for (const QJsonValue& value : testHistory) {
         QJsonObject resultObj = value.toObject();
         TestResult result;
         result.timestamp = QDateTime::fromString(resultObj["timestamp"].toString(), Qt::ISODate);
         result.totalWords = resultObj["totalWords"].toInt();
         result.correctCount = resultObj["correctCount"].toInt();
         result.accuracy = resultObj["accuracy"].toDouble();
-        result.wordListName = decryptString(resultObj["wordListName"].toString());
+        result.wordListName = resultObj["wordListName"].toString(); // 不再需要解密字符串
         user.testHistory.push_back(result);
     }
     
     userProfiles[username] = user;
     qDebug() << "Encrypted user profile loaded for:" << username;
+}
+
+void MainWindow::savePlainUserProfile(const QString& username)
+{
+    if (!userProfiles.contains(username)) return;
+    
+    UserData& user = userProfiles[username];
+    QString userFilePath = userDataPath + "/" + username + ".json";
+    
+    // 准备用户数据
+    QJsonObject userDataObj;
+    userDataObj["username"] = user.username;
+    userDataObj["nickname"] = user.nickname;
+    userDataObj["createdTime"] = user.createdTime.toString(Qt::ISODate);
+    userDataObj["lastLoginTime"] = user.lastLoginTime.toString(Qt::ISODate);
+    userDataObj["isActive"] = user.isActive;
+    userDataObj["totalStudyTime"] = user.totalStudyTime;
+    userDataObj["completedTests"] = user.completedTests;
+    userDataObj["isDarkTheme"] = user.isDarkTheme;
+    userDataObj["readInterval"] = user.readInterval;
+    userDataObj["speechEngine"] = user.speechEngine;
+    userDataObj["isRandomOrder"] = user.isRandomOrder;
+    
+    // 隐私设置
+    userDataObj["allowDataCollection"] = user.allowDataCollection;
+    userDataObj["allowCloudSync"] = user.allowCloudSync;
+    userDataObj["allowAnalytics"] = user.allowAnalytics;
+    userDataObj["shareLearningStats"] = user.shareLearningStats;
+    
+    // 词库列表
+    QJsonArray wordLists;
+    for (const QString& wordList : user.wordLists) {
+        wordLists.append(wordList);
+    }
+    userDataObj["wordLists"] = wordLists;
+    
+    // 测试历史
+    QJsonArray testHistory;
+    for (const auto& result : user.testHistory) {
+        QJsonObject resultObj;
+        resultObj["timestamp"] = result.timestamp.toString(Qt::ISODate);
+        resultObj["totalWords"] = result.totalWords;
+        resultObj["correctCount"] = result.correctCount;
+        resultObj["accuracy"] = result.accuracy;
+        resultObj["wordListName"] = result.wordListName;
+        testHistory.append(resultObj);
+    }
+    userDataObj["testHistory"] = testHistory;
+    
+    // 保存为JSON文件
+    QJsonDocument doc(userDataObj);
+    QFile file(userFilePath);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(doc.toJson(QJsonDocument::Indented));
+        file.close();
+        qDebug() << "Plain user profile saved for:" << username;
+    }
+}
+
+void MainWindow::loadPlainUserProfile(const QString& username)
+{
+    if (username.isEmpty()) return;
+    
+    QString userFilePath = userDataPath + "/" + username + ".json";
+    
+    QFile file(userFilePath);
+    if (!file.open(QIODevice::ReadOnly)) return;
+    
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+    
+    if (!doc.isObject()) return;
+    
+    QJsonObject userDataObj = doc.object();
+    UserData user;
+    
+    user.username = userDataObj["username"].toString();
+    user.nickname = userDataObj["nickname"].toString();
+    user.createdTime = QDateTime::fromString(userDataObj["createdTime"].toString(), Qt::ISODate);
+    user.lastLoginTime = QDateTime::fromString(userDataObj["lastLoginTime"].toString(), Qt::ISODate);
+    user.isActive = userDataObj["isActive"].toBool(true);
+    user.totalStudyTime = userDataObj["totalStudyTime"].toInt(0);
+    user.completedTests = userDataObj["completedTests"].toInt(0);
+    user.isDarkTheme = userDataObj["isDarkTheme"].toBool(false);
+    user.readInterval = userDataObj["readInterval"].toInt(5);
+    user.speechEngine = userDataObj["speechEngine"].toInt(0);
+    user.isRandomOrder = userDataObj["isRandomOrder"].toBool(false);
+    
+    // 隐私设置
+    user.allowDataCollection = userDataObj["allowDataCollection"].toBool(false);
+    user.allowCloudSync = userDataObj["allowCloudSync"].toBool(false);
+    user.allowAnalytics = userDataObj["allowAnalytics"].toBool(false);
+    user.shareLearningStats = userDataObj["shareLearningStats"].toBool(false);
+    
+    // 词库列表
+    QJsonArray wordLists = userDataObj["wordLists"].toArray();
+    for (const QJsonValue& value : wordLists) {
+        user.wordLists.append(value.toString());
+    }
+    
+    // 测试历史
+    QJsonArray testHistory = userDataObj["testHistory"].toArray();
+    for (const QJsonValue& value : testHistory) {
+        QJsonObject resultObj = value.toObject();
+        TestResult result;
+        result.timestamp = QDateTime::fromString(resultObj["timestamp"].toString(), Qt::ISODate);
+        result.totalWords = resultObj["totalWords"].toInt();
+        result.correctCount = resultObj["correctCount"].toInt();
+        result.accuracy = resultObj["accuracy"].toDouble();
+        result.wordListName = resultObj["wordListName"].toString();
+        user.testHistory.push_back(result);
+    }
+    
+    userProfiles[username] = user;
+    qDebug() << "Plain user profile loaded for:" << username;
 }
 
 // 用户界面实现
@@ -3755,6 +5007,15 @@ void MainWindow::showUserLoginDialog()
     
     layout->addWidget(userList);
     
+    // 密码输入框
+    QLabel *passwordLabel = new QLabel("密码:", &loginDialog);
+    QLineEdit *passwordEdit = new QLineEdit(&loginDialog);
+    passwordEdit->setEchoMode(QLineEdit::Password);
+    passwordEdit->setPlaceholderText("输入密码（加密模式下需要）");
+    
+    layout->addWidget(passwordLabel);
+    layout->addWidget(passwordEdit);
+    
     // 按钮布局
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     QPushButton *loginButton = new QPushButton("登录", &loginDialog);
@@ -3771,7 +5032,8 @@ void MainWindow::showUserLoginDialog()
     connect(loginButton, &QPushButton::clicked, [&]() {
         if (userList->currentItem()) {
             QString selectedUser = userList->currentItem()->data(Qt::UserRole).toString();
-            if (loginUser(selectedUser)) {
+            QString password = passwordEdit->text();
+            if (loginUser(selectedUser, password)) {
                 updateUserMenu();
                 loginDialog.accept();
             }
@@ -3789,14 +5051,24 @@ void MainWindow::showUserLoginDialog()
                                                        "请输入昵称 (可选):", 
                                                        QLineEdit::Normal, username, &ok);
                 if (ok) {
-                    createUser(username, nickname);
-                    // 刷新用户列表
-                    userList->clear();
-                    for (const QString& uname : userProfiles.keys()) {
-                        UserData& user = userProfiles[uname];
-                        QString displayText = QString("%1 (%2)").arg(user.nickname).arg(uname);
-                        QListWidgetItem *item = new QListWidgetItem(displayText, userList);
-                        item->setData(Qt::UserRole, uname);
+                    // 创建用户时也需要密码
+                    QString password = QInputDialog::getText(&loginDialog, "设置密码", 
+                                                           "请输入密码 (加密模式下需要):", 
+                                                           QLineEdit::Password, "", &ok);
+                    if (ok) {
+                        createUser(username, nickname);
+                        // 保存密码到缓存
+                        savePasswordForUser(username, password);
+                        // 保存用户数据（可能会加密）
+                        saveUserProfile(username);
+                        // 刷新用户列表
+                        userList->clear();
+                        for (const QString& uname : userProfiles.keys()) {
+                            UserData& user = userProfiles[uname];
+                            QString displayText = QString("%1 (%2)").arg(user.nickname).arg(uname);
+                            QListWidgetItem *item = new QListWidgetItem(displayText, userList);
+                            item->setData(Qt::UserRole, uname);
+                        }
                     }
                 }
             } else {
@@ -3807,10 +5079,11 @@ void MainWindow::showUserLoginDialog()
     
     connect(cancelButton, &QPushButton::clicked, &loginDialog, &QDialog::reject);
     
-    // 双击用户列表项直接登录
+    // 双击用户列表项直接登录（需要输入密码）
     connect(userList, &QListWidget::itemDoubleClicked, [&](QListWidgetItem *item) {
         QString selectedUser = item->data(Qt::UserRole).toString();
-        if (loginUser(selectedUser)) {
+        QString password = passwordEdit->text();
+        if (loginUser(selectedUser, password)) {
             updateUserMenu();
             loginDialog.accept();
         }

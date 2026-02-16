@@ -86,7 +86,6 @@ MainWindow::MainWindow(QWidget *parent)
     , isValidWordlistDir(false)
     , wordlistDirPath("./wordlist")
     , tempWordlistFile("")
-    , speechEngine(0)
     , isRandomOrder(false)
     , wordsTextChangedTimer(nullptr)
     , lastWordsText("")
@@ -1074,7 +1073,7 @@ void MainWindow::onShowAbout()
     aboutBox.setFont(aboutFont);
     
     aboutBox.setText(
-        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.3.2</h2>"
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.4.0</h2>"
         "<p style='font-family: Microsoft YaHei;'>一个帮助学习英语的听写练习工具</p>"
         "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，支持 Windows SAPI 和 Flite 语音引擎。</p>"
         "<h3 style='font-family: Microsoft YaHei;'>功能特点：</h3>"

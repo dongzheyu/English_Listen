@@ -98,7 +98,7 @@ English Listen 是一款专为英语学习者设计的智能听写软件。它�
 
 #### 实现细节
 
-快捷键功能通过重写[QMainWindow](file:///D:/msys64/mingw64/include/qt6/QtWidgets/qmainwindow.h#L58-L266)的[keyPressEvent](file:///D:/msys64/mingw64/include/qt6/QtWidgets/qwidget.h#L310-L310)函数实现。当前只在测试界面中启用了快捷键功能，以避免与其他界面的输入冲突。
+快捷键功能通过重写QMainWindow的keyPressEvent函数实现。当前只在测试界面中启用了快捷键功能，以避免与其他界面的输入冲突。
 
 ## 技术架构
 

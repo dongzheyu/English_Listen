@@ -1,7 +1,8 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-// 包含必要的Qt头文件
+// 使用预编译头文件
+#include "pch.h"
 #include <QMainWindow>
 #include <QWidget>
 #include <QVBoxLayout>

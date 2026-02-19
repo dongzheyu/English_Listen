@@ -4,6 +4,34 @@ project(English_Listen)
 # 编译优化配置
 option(ENABLE_CCACHE "Enable ccache support" ON)
 option(ENABLE_PARALLEL_BUILD "Enable parallel build" ON)
+option(ENABLE_PCH "Enable precompiled headers" ON)
+
+# 编译缓存配置
+if(ENABLE_CCACHE)
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+        message(STATUS "ccache enabled: ${CCACHE_PROGRAM}")
+    else()
+        message(STATUS "ccache not found, continuing without cache support")
+    endif()
+endif()
+
+# 设置并行编译
+if(ENABLE_PARALLEL_BUILD)
+    if(MSVC)
+        # MSVC并行编译
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+        message(STATUS "MSVC parallel build enabled (/MP)")
+    else()
+        # GCC/Clang并行编译通过构建工具控制
+        include(ProcessorCount)
+        ProcessorCount(N)
+        if(NOT N EQUAL 0)
+            message(STATUS "GCC/Clang parallel build will use ${N} cores via build tool")
+        endif()
+    endif()
+endif()
 
 # 1. 基础环境设置
 set(CMAKE_CXX_STANDARD 17)
@@ -17,12 +45,20 @@ message(STATUS "Building 64-bit version only")
 # 2. 编译器优化设置
 if(MSVC)
     # MSVC优化选项
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /GL")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /GL /favor:INTEL64 /bigobj /MP")
     set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
+    # 启用快速链接
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /DEBUG:FASTLINK")
 else()
-    # GCC/Clang优化选项
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto")
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto")
+    # GCC/Clang优化选项（内存友好型）
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto=auto -march=native -pipe -ftree-vectorize")
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto=auto")
+    # 启用链接时间优化
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+    # 启用更多优化
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fwhole-program -fvisibility=hidden")
+    # 优化内存使用
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-ipa-cp-clone")
 endif()
 
 # 3. 并行编译设置
@@ -47,18 +83,31 @@ if(ENABLE_CCACHE)
         message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
         
         # 设置ccache配置
-        set(ENV{CCACHE_SLOPPINESS} "pch_defines,time_macros")
+        set(ENV{CCACHE_SLOPPINESS} "pch_defines,time_macros,include_file_mtime,include_file_ctime")
         set(ENV{CCACHE_BASEDIR} "${CMAKE_SOURCE_DIR}")
         set(ENV{CCACHE_NOHASHDIR} "true")
+        set(ENV{CCACHE_MAXSIZE} "2G")
     else()
         message(STATUS "ccache not found, continuing without cache support")
     endif()
 endif()
 
-# 5. 启用 Qt 自动化
+# 5. 启用 Qt 自动化（高性能版本）
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+
+# Qt自动化性能优化
+set(CMAKE_AUTOMOC_COMPILER_PREDEFINES ON)
+set(CMAKE_AUTOUIC_SEARCH_PATHS ${CMAKE_CURRENT_SOURCE_DIR})
+
+# 并行MOC处理优化
+if(POLICY CMP0071)
+    cmake_policy(SET CMP0071 NEW)
+endif()
+
+# 减少不必要的MOC处理
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -86,6 +135,7 @@ add_executable(QtEnglishListen
     mainwindow.cpp
     mainwindow.h
     english_listen.rc
+    pch.cpp
 )
 
 # 10. 链接库
@@ -97,10 +147,11 @@ target_link_libraries(QtEnglishListen
     Qt6::Charts
 )
 
-# 移除预编译头文件
-set_source_files_properties(pch.cpp PROPERTIES HEADER_FILE_ONLY ON)
-
-# 预编译头文件功能已移除
+# 6. 预编译头文件设置
+if(ENABLE_PCH)
+    target_precompile_headers(QtEnglishListen PRIVATE pch.h)
+    message(STATUS "Precompiled headers enabled")
+endif()
 
 # 11. Windows 平台特定配置
 if(WIN32)

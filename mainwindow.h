@@ -1,13 +1,53 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-// 使用预编译头文件包含大部分常用头文件
-#include "pch.h"
-
-// 只包含预编译头文件中没有的特定头文件
+// 包含必要的Qt头文件
+#include <QMainWindow>
+#include <QWidget>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QTextEdit>
+#include <QLineEdit>
+#include <QTimer>
+#include <QDateTime>
+#include <QMap>
+#include <QVector>
+#include <QString>
+#include <QMessageBox>
+#include <QFileDialog>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QProgressDialog>
+#include <QParallelAnimationGroup>
+#include <QGraphicsOpacityEffect>
+#include <QPropertyAnimation>
+#include <QScrollArea>
+#include <QApplication>
+#include <QProcess>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
+#include <QStandardPaths>
+#include <QSettings>
 #include <QKeySequence>
 #include <QCryptographicHash>
 #include <QRandomGenerator>
+#include <QComboBox>
+#include <QSpinBox>
+#include <QGroupBox>
+#include <QCheckBox>
+#include <QListWidget>
+#include <QListWidgetItem>
+#include <QFormLayout>
+#include <QDirIterator>
+#include <vector>
+#include <string>
+#include <random>
+#include <algorithm>
+#include <functional>
+
 // 学习结果结构体
 struct TestResult {
     QDateTime timestamp;
@@ -128,6 +168,7 @@ private:
     // 单词页面控件
     QWidget *wordsWidget;
     QVBoxLayout *wordsLayout;
+    QVBoxLayout *wordButtonLayout;  // 单词界面按钮布局
     QTextEdit *wordsTextEdit;       // 用于显示和编辑单词
     QPushButton *addWordButton;     // 添加单词按钮
     QPushButton *removeWordButton;  // 删除单词按钮
@@ -298,6 +339,9 @@ private:
     QString hashPassword(const QString& password);
     bool validateUsername(const QString& username);
     void updateCurrentUserProfile();
+    
+    // 通知系统函数
+    void showNotification(const QString& title, const QString& message, const QString& iconPath = "");  // 显示系统通知
     
     // 数据加密相关函数
     QByteArray generateEncryptionKey();

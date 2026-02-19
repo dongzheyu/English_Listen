@@ -238,7 +238,8 @@ void MainWindow::setupUI()
 
         // 创建按钮布局
         QHBoxLayout *buttonLayout = new QHBoxLayout();
-        buttonLayout->setSpacing(10);
+        buttonLayout->setSpacing(15);  // 增加按钮间距
+        buttonLayout->setContentsMargins(20, 10, 20, 10);  // 添加布局边距
 
         viewWordsButton = new QPushButton("查看单词", this);
         settingsButton = new QPushButton("设置", this);
@@ -256,7 +257,7 @@ void MainWindow::setupUI()
         guideButton->setStyleSheet(buttonStyle);
 
         // 设置按钮尺寸策略以支持缩放
-        QSize minButtonSize(100, 30);
+        QSize minButtonSize(120, 35);  // 增加按钮最小尺寸
         viewWordsButton->setMinimumSize(minButtonSize);
         settingsButton->setMinimumSize(minButtonSize);
         startButton->setMinimumSize(minButtonSize);
@@ -264,12 +265,12 @@ void MainWindow::setupUI()
         aboutButton->setMinimumSize(minButtonSize);
         guideButton->setMinimumSize(minButtonSize);
 
-        viewWordsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        settingsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        startButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        themeButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        aboutButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        guideButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        viewWordsButton->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+        settingsButton->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+        startButton->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+        themeButton->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+        aboutButton->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+        guideButton->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
 
         buttonLayout->addWidget(viewWordsButton);
         buttonLayout->addWidget(settingsButton);
@@ -394,12 +395,14 @@ void MainWindow::setupUI()
             filterComboBox->setCurrentIndex(0);
         });
 
-        // 创建单词操作按钮
-        QHBoxLayout *wordButtonLayout = new QHBoxLayout();
-        wordButtonLayout->setSpacing(5);
+        // 创建单词操作按钮容器（垂直布局，包含两行按钮）
+        QVBoxLayout *wordButtonContainer = new QVBoxLayout();
+        wordButtonContainer->setSpacing(10);
 
         wordInput = new QLineEdit(wordsWidget);
         wordInput->setPlaceholderText("输入单词");
+        wordInput->setMinimumHeight(30);
+        wordInput->setMinimumWidth(150);  // 设置输入框最小宽度
 
         addWordButton = new QPushButton("添加单词", wordsWidget);
         removeWordButton = new QPushButton("删除选中行", wordsWidget);
@@ -430,17 +433,29 @@ void MainWindow::setupUI()
         exportWordsButton->setMinimumSize(minButtonSize);
         backToHomeButton->setMinimumSize(minButtonSize);
 
-        wordInput->setMinimumHeight(30);
-
-        wordButtonLayout->addWidget(wordInput);
-        wordButtonLayout->addWidget(addWordButton);
-        wordButtonLayout->addWidget(removeWordButton);
-        wordButtonLayout->addWidget(clearWordsButton);
-        wordButtonLayout->addWidget(loadWordsButton);
-        wordButtonLayout->addWidget(saveWordsButton);
-        wordButtonLayout->addWidget(importWordsButton);
-        wordButtonLayout->addWidget(exportWordsButton);
-        wordButtonLayout->addWidget(backToHomeButton);
+        // 创建两行按钮布局，避免按钮过多导致重叠
+        QHBoxLayout *firstRowLayout = new QHBoxLayout();
+        firstRowLayout->setSpacing(10);
+        firstRowLayout->addWidget(wordInput);
+        firstRowLayout->addWidget(addWordButton);
+        firstRowLayout->addWidget(removeWordButton);
+        firstRowLayout->addWidget(clearWordsButton);
+        firstRowLayout->addStretch();
+        
+        QHBoxLayout *secondRowLayout = new QHBoxLayout();
+        secondRowLayout->setSpacing(10);
+        secondRowLayout->addWidget(loadWordsButton);
+        secondRowLayout->addWidget(saveWordsButton);
+        secondRowLayout->addWidget(importWordsButton);
+        secondRowLayout->addWidget(exportWordsButton);
+        secondRowLayout->addWidget(backToHomeButton);
+        secondRowLayout->addStretch();
+        
+        wordButtonContainer->addLayout(firstRowLayout);
+        wordButtonContainer->addLayout(secondRowLayout);
+        
+        // 将容器布局赋值给 wordButtonLayout（注意：这里改变了原有变量的类型）
+        wordButtonLayout = wordButtonContainer;
         
         // 连接导入导出按钮的信号槽
         connect(importWordsButton, &QPushButton::clicked, [=]() {
@@ -541,7 +556,8 @@ void MainWindow::setupUI()
 
         // 创建控制按钮布局
         QHBoxLayout *controlLayout = new QHBoxLayout();
-        controlLayout->setSpacing(10);
+        controlLayout->setSpacing(15);  // 增加按钮间距
+        controlLayout->setContentsMargins(20, 10, 20, 10);  // 添加布局边距
 
         // 创建重复朗读按钮
         repeatButton = new QPushButton("再读一遍", testWidget);
@@ -688,8 +704,8 @@ void MainWindow::setupUI()
 
         // 设置窗口属性
         setWindowTitle("英语听写练习");
-        resize(600, 400);
-        setMinimumSize(400, 300);
+        resize(800, 500);  // 增加初始窗口尺寸
+        setMinimumSize(700, 400);  // 增加最小窗口尺寸，确保按钮不重叠
     }
 
     // 初始化测试定时器
@@ -1142,6 +1158,9 @@ void MainWindow::showTestInterface()
     
     // 执行界面切换动画
     animateInterfaceSwitch(currentWidget, testWidget);
+    
+    // 显示开始听写测试的通知
+    showNotification("听写测试开始", QString("共有 %1 个单词，准备开始听写！").arg(words.size()), "logo.ico");
 }
 
 void MainWindow::showAnswersInterface()
@@ -1181,6 +1200,9 @@ void MainWindow::showAnswersInterface()
     
     // 执行界面切换动画
     animateInterfaceSwitch(currentWidget, answersWidget);
+    
+    // 显示听写测试完成的通知
+    showNotification("听写测试完成", QString("已完成 %1 个单词的听写练习！").arg(words.size()), "logo.ico");
 }
 
 void MainWindow::onViewWords()
@@ -1391,7 +1413,7 @@ void MainWindow::onShowAbout()
         "<li>修复设置对话框非模态导致的界面交互问题</li>"
         "<li>修复Flite语音引擎下载完成后错误显示\"下载取消\"提示的问题</li>"
         "</ul>"
-        "<p style='font-family: Microsoft YaHei;'>版权 © 2025 JetCPP。本软件使用 MIT 许可证发布。</p>"
+"<p style='font-family: Microsoft YaHei;'>版权 © 2026 JetCPP。本软件使用 MIT 许可证发布。</p>"
         "<p style='font-family: Microsoft YaHei;'>GitHub 仓库地址：<a href='https://github.com/dongzheyu/English_Listen'>https://github.com/dongzheyu/English_Listen</a></p>"
         "<p style='font-family: Microsoft YaHei;'>Gitee 仓库地址：<a href='https://gitee.com/jetcpp/english_-listen'>https://gitee.com/jetcpp/english_-listen</a></p>"
     );
@@ -1607,11 +1629,18 @@ void MainWindow::onSelectDictationMode()
     // 创建选择对话框
     QDialog dialog(this);
     dialog.setWindowTitle("选择听写模式");
-    dialog.resize(300, 150);
+    dialog.resize(350, 200);
     
     QVBoxLayout layout(&dialog);
-    QLabel label("请选择听写模式：", &dialog);
-    layout.addWidget(&label);
+    QLabel *titleLabel = new QLabel("请选择听写模式：", &dialog);
+    titleLabel->setAlignment(Qt::AlignCenter);
+    QFont titleFont = titleLabel->font();
+    titleFont.setFamily("Microsoft YaHei");
+    titleFont.setPointSize(12);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    titleLabel->setStyleSheet("color: #333333; margin-bottom: 15px;");
+    layout.addWidget(titleLabel);
     
     QPushButton paperButton("纸笔听写", &dialog);
     QPushButton onlineButton("在线听写", &dialog);
@@ -1619,20 +1648,24 @@ void MainWindow::onSelectDictationMode()
     // 设置按钮样式
     QString buttonStyle = "QPushButton { "
                         "font-family: 'Microsoft YaHei'; "
-                        "font-size: 9pt; "
-                        "padding: 6px 14px; "
-                        "margin: 4px; "
-                        "border: 1px solid #cccccc; "
-                        "border-radius: 4px; "
-                        "background-color: #f0f0f0; "
+                        "font-size: 11pt; "
+                        "font-weight: bold; "
+                        "padding: 12px 20px; "
+                        "margin: 6px; "
+                        "border: 2px solid #555555; "
+                        "border-radius: 8px; "
+                        "background-color: #ffffff; "
+                        "color: #333333; "
                         "}" 
                         "QPushButton:hover { "
-                        "background-color: #e0e0e0; "
-                        "border: 1px solid #999999; "
+                        "background-color: #e8f4fd; "
+                        "border: 2px solid #3399ff; "
+                        "color: #0066cc; "
                         "}" 
                         "QPushButton:pressed { "
-                        "background-color: #d0d0d0; "
-                        "border: 1px solid #666666; "
+                        "background-color: #cce6ff; "
+                        "border: 2px solid #0066cc; "
+                        "color: #004499; "
                         "}";
     
     paperButton.setStyleSheet(buttonStyle);
@@ -2328,6 +2361,9 @@ void MainWindow::importFromCSV(const QString &filePath)
         wordsTextEdit->setPlainText(wordsText);
     }
     
+    // 显示导入成功的通知
+    showNotification("导入成功", QString("已从 %1 导入 %2 个单词").arg(QFileInfo(filePath).fileName()).arg(words.size()), "logo.ico");
+    
     QMessageBox::information(this, "导入成功", "词库已从CSV文件导入");
 }
 
@@ -2345,6 +2381,10 @@ void MainWindow::exportToCSV(const QString &filePath)
     }
     
     file.close();
+    
+    // 显示导出成功的通知
+    showNotification("导出成功", QString("已将 %1 个单词导出到 %2").arg(words.size()).arg(QFileInfo(filePath).fileName()), "logo.ico");
+    
     QMessageBox::information(this, "导出成功", "词库已成功导出到CSV文件");
 }
 
@@ -2488,6 +2528,11 @@ void MainWindow::loadWordsFromFile(const QString &filename)
         }
         
         qDebug() << QString("成功从文件 %1 加载 %2 个单词").arg(filename).arg(words.size());
+        
+        // 显示加载成功的通知（仅在用户手动加载文件时显示，不显示临时文件加载）
+        if (!filename.contains("temp_")) {
+            showNotification("加载成功", QString("已从 %1 加载 %2 个单词").arg(QFileInfo(filename).fileName()).arg(words.size()), "logo.ico");
+        }
     } catch (const std::exception& e) {
         QString errorMsg = QString("加载文件时发生错误: %1").arg(e.what());
         qDebug() << errorMsg;
@@ -2554,6 +2599,9 @@ void MainWindow::saveWordsToFile(const QString &filename)
         }
 
         file.close();
+
+        // 显示保存成功的通知
+        showNotification("保存成功", QString("已将 %1 个单词保存到 %2").arg(words.size()).arg(QFileInfo(filename).fileName()), "logo.ico");
 
         // 确认保存成功
         QString successMsg = QString("词库已成功保存至：%1\n共保存 %2 个单词").arg(filename).arg(words.size());
@@ -3153,6 +3201,17 @@ sapi_fallback:
 
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
+    // 限制窗口的最小纵横比，避免窗口太窄
+    // 最小宽高比设为 1.4（700/500），确保按钮不会重叠
+    QSize newSize = event->size();
+    int minWidth = qMax(newSize.height() * 7 / 5, 700); // 最小宽高比 7:5
+    
+    if (newSize.width() < minWidth) {
+        newSize.setWidth(minWidth);
+        resize(newSize);
+        return; // 避免递归调用
+    }
+    
     QMainWindow::resizeEvent(event);
 
     // 更新欢迎语标签的位置，确保居中
@@ -3169,38 +3228,38 @@ void MainWindow::adjustButtons()
     // 获取当前窗口宽度
     int windowWidth = width();
 
-    // 调整主页按钮
-    if (viewWordsButton && settingsButton && startButton && themeButton) {
-        // 计算按钮总宽度和间距
-        int totalButtonWidth = viewWordsButton->minimumWidth() * 4;
-        int totalSpacing = 10 * 3; // 4个按钮间有3个间距
-        int totalWidth = totalButtonWidth + totalSpacing + 40; // 加上左右边距
+    // 调整主页按钮（6个按钮：查看单词、设置、开始听写测试、切换主题、关于、使用指南）
+    if (viewWordsButton && settingsButton && startButton && themeButton && aboutButton) {
+        // 计算按钮总宽度和间距（6个按钮，5个间距，左右边距各20）
+        int buttonCount = 6;
+        int totalSpacing = 15 * (buttonCount - 1); // 按钮间距15
+        int margin = 40; // 左右边距总和
+        int totalWidth = (viewWordsButton->minimumWidth() * buttonCount) + totalSpacing + margin;
 
         // 如果总宽度超过窗口宽度，则缩小按钮
         if (totalWidth > windowWidth) {
             // 计算新的按钮宽度
-            int newWidth = (windowWidth - totalSpacing - 40) / 4;
-            int adjustedWidth = qMax(60, newWidth); // 确保按钮不会太小
+            int newWidth = (windowWidth - totalSpacing - margin) / buttonCount;
+            int adjustedWidth = qMax(80, newWidth); // 确保按钮不会太小（最小80像素）
 
             viewWordsButton->setMinimumWidth(adjustedWidth);
             settingsButton->setMinimumWidth(adjustedWidth);
             startButton->setMinimumWidth(adjustedWidth);
             themeButton->setMinimumWidth(adjustedWidth);
+            aboutButton->setMinimumWidth(adjustedWidth);
         } else {
             // 窗口足够大，恢复默认宽度
-            viewWordsButton->setMinimumWidth(100);
-            settingsButton->setMinimumWidth(100);
-            startButton->setMinimumWidth(100);
-            themeButton->setMinimumWidth(100);
+            int defaultWidth = 120;
+            viewWordsButton->setMinimumWidth(defaultWidth);
+            settingsButton->setMinimumWidth(defaultWidth);
+            startButton->setMinimumWidth(defaultWidth);
+            themeButton->setMinimumWidth(defaultWidth);
+            aboutButton->setMinimumWidth(defaultWidth);
         }
     }
 
-    // 调整单词界面按钮（类似处理）
-    if (addWordButton && removeWordButton && clearWordsButton &&
-        loadWordsButton && saveWordsButton && backToHomeButton) {
-        // 这些按钮在 QHBoxLayout 中，Qt 会自动处理布局
-        // 如果需要特殊处理，可以在这里添加
-    }
+    // 调整单词界面按钮（现在有两行布局，不需要特殊处理）
+    // Qt 的布局管理器会自动处理
 
     // 调整测试界面按钮（类似处理）
     if (repeatButton && previousButton && nextButton && pauseResumeButton) {
@@ -3322,6 +3381,9 @@ void MainWindow::onDownloadFinished(QNetworkReply* reply)
                 delete downloadProgressDialog;
                 downloadProgressDialog = nullptr;
             }
+
+            // 显示下载完成的通知
+            showNotification("下载完成", "Flite语音引擎下载完成！现在可以使用Flite引擎进行语音朗读了。", "logo.ico");
 
             QMessageBox::information(this, "下载完成",
                 "Flite语音引擎下载完成！现在可以使用Flite引擎进行语音朗读了。\n\n"
@@ -4615,6 +4677,55 @@ void MainWindow::updateCurrentUserProfile()
         user.speechEngine = speechEngine;
         user.isRandomOrder = isRandomOrder;
         user.testHistory = testHistory;
+    }
+}
+
+void MainWindow::showNotification(const QString& title, const QString& message, const QString& iconPath)
+{
+    // 根据系统架构选择合适的 snoretoast 可执行文件
+    QString snoretoastPath;
+    
+#ifdef _WIN64
+    snoretoastPath = QCoreApplication::applicationDirPath() + "/snoretoast-x64.exe";
+#else
+    snoretoastPath = QCoreApplication::applicationDirPath() + "/snoretoast-x86.exe";
+#endif
+    
+    // 检查文件是否存在
+    if (!QFile::exists(snoretoastPath)) {
+        qDebug() << "Snoretoast executable not found:" << snoretoastPath;
+        return;
+    }
+    
+    // 构建命令行参数
+    QStringList arguments;
+    arguments << "-t" << title;
+    arguments << "-m" << message;
+    
+    // 如果提供了图标路径且文件存在，则添加图标参数
+    if (!iconPath.isEmpty() && QFile::exists(iconPath)) {
+        arguments << "-p" << iconPath;
+    }
+    
+    // 添加应用程序ID以避免通知冲突
+    arguments << "-id" << ("EnglishListen_" + QString::number(QDateTime::currentMSecsSinceEpoch()));
+    
+    // 启动进程显示通知
+    QProcess* process = new QProcess(this);
+    process->start(snoretoastPath, arguments);
+    
+    // 连接信号以确保进程在完成后被删除
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [process](int exitCode, QProcess::ExitStatus exitStatus) {
+                Q_UNUSED(exitCode);
+                Q_UNUSED(exitStatus);
+                process->deleteLater();
+            });
+    
+    // 如果进程启动失败，输出错误信息
+    if (!process->waitForStarted(1000)) {
+        qDebug() << "Failed to start snoretoast:" << process->errorString();
+        process->deleteLater();
     }
 }
 

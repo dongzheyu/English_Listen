@@ -168,6 +168,9 @@ set_target_properties(QtEnglishListen PROPERTIES
 
 set(MAIN_TARGET QtEnglishListen)
 
+# 版本定义
+set(PROJECT_VERSION "2.6.0")
+
 # 13. 核心部署逻辑
 if(WIN32)
     get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)

@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include <QDebug>
 #include <QProgressDialog>
 #include <QKeyEvent>
 #include <QStyleHints>
@@ -57,6 +58,10 @@ MainWindow::MainWindow(QWidget *parent)
     , loadingTimer(nullptr)
     , loadingAnimationStep(0)
     , loadingRotationAnim(nullptr)
+    , colorChangeTimer(nullptr)
+    , currentColor(Qt::black)
+    , targetColor(Qt::red)
+    , colorTransitionStep(0)
     , wordsWidget(nullptr)
     , wordsLayout(nullptr)
     , wordsTextEdit(nullptr)
@@ -101,6 +106,10 @@ MainWindow::MainWindow(QWidget *parent)
     , encryptionEnabled(true)
     , speechEngine(0)
 {
+    // 调试：分段屏蔽法测试
+    qDebug() << "Constructor started";
+    
+    // 恢复基本功能
     // 设置窗口图标
     setWindowIcon(QIcon("logo.ico"));
     
@@ -118,16 +127,21 @@ MainWindow::MainWindow(QWidget *parent)
     // 初始化用户菜单
     updateUserMenu();
     
-    // 初始化用户菜单
-    updateUserMenu();
-    
+    qDebug() << "About to call setupUI";
     setupUI();
+    qDebug() << "setupUI completed";
+    
+    // 恢复文件相关功能
     checkWordlistDirectory();
     loadWordlistFiles();
     createTempWordlist();
     // 注释掉这行，避免在启动时自动加载临时词库文件
     // loadFromTempWordlist();
+    
+    // 启动欢迎动画
     startWelcomeAnimation();
+    
+    qDebug() << "Constructor completed successfully";
 }
 
 MainWindow::~MainWindow()
@@ -155,6 +169,12 @@ MainWindow::~MainWindow()
     }
     if (loadingRotationAnim) {
         delete loadingRotationAnim;
+    }
+    
+    // 清理颜色渐变定时器
+    if (colorChangeTimer) {
+        colorChangeTimer->stop();
+        delete colorChangeTimer;
     }
 }
 
@@ -2958,12 +2978,61 @@ void MainWindow::startWelcomeAnimation()
     if (welcomeTimer) {
         welcomeTimer->start(100); // 每100毫秒更新一次动画
     }
+    
+    // 启动颜色渐变定时器
+    if (!colorChangeTimer) {
+        colorChangeTimer = new QTimer(this);
+        connect(colorChangeTimer, &QTimer::timeout, this, &MainWindow::updateWelcomeColor);
+    }
+    colorChangeTimer->start(1500); // 每1.5秒改变一次颜色
+    
+    // 初始化颜色
+    currentColor = QColor(Qt::red);
+    generateNewTargetColor();
+    colorTransitionStep = 0;
+}
+
+void MainWindow::generateNewTargetColor()
+{
+    // 生成随机的RGB颜色
+    int r = QRandomGenerator::global()->bounded(256);
+    int g = QRandomGenerator::global()->bounded(256);
+    int b = QRandomGenerator::global()->bounded(256);
+    targetColor = QColor(r, g, b);
+}
+
+void MainWindow::updateWelcomeColor()
+{
+    if (!welcomeLabel) return;
+    
+    // 执行颜色渐变
+    if (colorTransitionStep < COLOR_TRANSITION_STEPS) {
+        // 计算渐变颜色
+        qreal ratio = (qreal)colorTransitionStep / COLOR_TRANSITION_STEPS;
+        int r = currentColor.red() + (targetColor.red() - currentColor.red()) * ratio;
+        int g = currentColor.green() + (targetColor.green() - currentColor.green()) * ratio;
+        int b = currentColor.blue() + (targetColor.blue() - currentColor.blue()) * ratio;
+        
+        QString stylesheet = QString("QLabel { color: rgb(%1, %2, %3); }").arg(r).arg(g).arg(b);
+        welcomeLabel->setStyleSheet(stylesheet);
+        
+        colorTransitionStep++;
+    } else {
+        // 渐变完成，设置为目标颜色
+        currentColor = targetColor;
+        QString stylesheet = QString("QLabel { color: rgb(%1, %2, %3); }").arg(targetColor.red()).arg(targetColor.green()).arg(targetColor.blue());
+        welcomeLabel->setStyleSheet(stylesheet);
+        
+        // 生成新的目标颜色
+        generateNewTargetColor();
+        colorTransitionStep = 0;
+    }
 }
 
 void MainWindow::onUpdateWelcomeAnimation()
 {
     if (!welcomeLabel) return;
-
+    
     // 更新动画步骤
     welcomeAnimationStep = (welcomeAnimationStep + 1) % 360;
 

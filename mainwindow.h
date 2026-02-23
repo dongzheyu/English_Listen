@@ -132,6 +132,13 @@ private:
     int welcomeAnimationStep;
     QStringList welcomeMessages;
     
+    // 欢迎界面颜色渐变相关
+    QTimer *colorChangeTimer;
+    QColor currentColor;
+    QColor targetColor;
+    int colorTransitionStep;
+    static const int COLOR_TRANSITION_STEPS = 30; // 渐变步数
+    
     // 界面切换动画相关
     QParallelAnimationGroup *fadeInOutGroup;
     QGraphicsOpacityEffect *homeOpacityEffect;
@@ -205,6 +212,8 @@ private:
     void toggleTheme();  // 切换主题的方法
     void updateWelcomeMessage();  // 更新欢迎语
     void startWelcomeAnimation(); // 开始欢迎语动画
+    void generateNewTargetColor(); // 生成新的目标颜色
+    void updateWelcomeColor();     // 更新欢迎界面颜色
     void adjustButtons();         // 调整按钮大小和布局
     void checkWordlistDirectory(); // 检查词库目录
     bool isValidWordlistFile(const QString &filePath); // 检查词库文件是否有效

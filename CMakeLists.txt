@@ -149,6 +149,7 @@ target_link_libraries(QtEnglishListen
 
 # 6. 预编译头文件设置
 if(ENABLE_PCH)
+    # 为目标启用预编译头
     target_precompile_headers(QtEnglishListen PRIVATE pch.h)
     message(STATUS "Precompiled headers enabled")
 endif()

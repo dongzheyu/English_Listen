@@ -3,21 +3,9 @@
 
 // 使用预编译头文件
 #include "pch.h"
+
+// Qt核心组件（已在pch.h中包含的部分可以省略）
 #include <QMainWindow>
-#include <QWidget>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QPushButton>
-#include <QTextEdit>
-#include <QLineEdit>
-#include <QTimer>
-#include <QDateTime>
-#include <QMap>
-#include <QVector>
-#include <QString>
-#include <QMessageBox>
-#include <QFileDialog>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QProgressDialog>
@@ -25,24 +13,17 @@
 #include <QGraphicsOpacityEffect>
 #include <QPropertyAnimation>
 #include <QScrollArea>
-#include <QApplication>
 #include <QProcess>
-#include <QDir>
-#include <QFile>
-#include <QTextStream>
-#include <QStandardPaths>
 #include <QSettings>
 #include <QKeySequence>
 #include <QCryptographicHash>
 #include <QRandomGenerator>
-#include <QComboBox>
-#include <QSpinBox>
 #include <QGroupBox>
-#include <QCheckBox>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QFormLayout>
 #include <QDirIterator>
+#include <memory>
 #include <vector>
 #include <string>
 #include <random>
@@ -158,8 +139,6 @@ private:
     QGraphicsOpacityEffect *testOpacityEffect;
     QGraphicsOpacityEffect *answersOpacityEffect;
     
-
-    
     // 加载动画相关
     QLabel *loadingLabel;
     QTimer *loadingTimer;
@@ -193,7 +172,7 @@ private:
     QLabel *answersLabel;
     QPushButton *backToMainButton;
     QScrollArea *answersScrollArea;
-    
+
     // 网络下载相关
     QNetworkAccessManager *networkManager;
     QProgressDialog *downloadProgressDialog;

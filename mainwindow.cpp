@@ -2987,46 +2987,61 @@ void MainWindow::startWelcomeAnimation()
     colorChangeTimer->start(1500); // 每1.5秒改变一次颜色
     
     // 初始化颜色
-    currentColor = QColor(Qt::red);
+    currentColor = QColor(255, 0, 0); // 红色
     generateNewTargetColor();
     colorTransitionStep = 0;
+    
+    // 立即设置初始颜色，避免闪烁
+    QString initialStyle = QString("QLabel { color: rgb(%1, %2, %3); }")
+                          .arg(currentColor.red())
+                          .arg(currentColor.green())
+                          .arg(currentColor.blue());
+    welcomeLabel->setStyleSheet(initialStyle);
 }
 
 void MainWindow::generateNewTargetColor()
 {
-    // 生成随机的RGB颜色
-    int r = QRandomGenerator::global()->bounded(256);
-    int g = QRandomGenerator::global()->bounded(256);
-    int b = QRandomGenerator::global()->bounded(256);
-    targetColor = QColor(r, g, b);
+    // 按照彩虹渐变顺序的颜色表
+    static const QColor rainbowColors[] = {
+        QColor(255, 0, 0),     // 红色
+        QColor(255, 127, 0),   // 橙红色
+        QColor(255, 255, 0),   // 黄色
+        QColor(127, 255, 0),   // 黄绿色
+        QColor(0, 255, 0),     // 绿色
+        QColor(0, 255, 127),   // 青绿色
+        QColor(0, 255, 255),   // 青色
+        QColor(0, 127, 255),   // 天蓝色
+        QColor(0, 0, 255),     // 蓝色
+        QColor(127, 0, 255),   // 靛蓝色
+        QColor(255, 0, 255),   // 紫色
+        QColor(255, 0, 127)    // 紫红色
+    };
+    
+    static int colorIndex = 0;
+    const int colorCount = sizeof(rainbowColors) / sizeof(QColor);
+    
+    // 确保不重复使用相同的颜色
+    static QColor lastColor(255, 0, 0);
+    
+    targetColor = rainbowColors[colorIndex];
+    
+    // 如果新颜色和上一个颜色相同，跳到下一个
+    if (targetColor == lastColor) {
+        colorIndex = (colorIndex + 1) % colorCount;
+        targetColor = rainbowColors[colorIndex];
+    }
+    
+    lastColor = targetColor;
+    colorIndex = (colorIndex + 1) % colorCount;
 }
 
 void MainWindow::updateWelcomeColor()
 {
+    // 不再进行颜色切换，保持白色
     if (!welcomeLabel) return;
     
-    // 执行颜色渐变
-    if (colorTransitionStep < COLOR_TRANSITION_STEPS) {
-        // 计算渐变颜色
-        qreal ratio = (qreal)colorTransitionStep / COLOR_TRANSITION_STEPS;
-        int r = currentColor.red() + (targetColor.red() - currentColor.red()) * ratio;
-        int g = currentColor.green() + (targetColor.green() - currentColor.green()) * ratio;
-        int b = currentColor.blue() + (targetColor.blue() - currentColor.blue()) * ratio;
-        
-        QString stylesheet = QString("QLabel { color: rgb(%1, %2, %3); }").arg(r).arg(g).arg(b);
-        welcomeLabel->setStyleSheet(stylesheet);
-        
-        colorTransitionStep++;
-    } else {
-        // 渐变完成，设置为目标颜色
-        currentColor = targetColor;
-        QString stylesheet = QString("QLabel { color: rgb(%1, %2, %3); }").arg(targetColor.red()).arg(targetColor.green()).arg(targetColor.blue());
-        welcomeLabel->setStyleSheet(stylesheet);
-        
-        // 生成新的目标颜色
-        generateNewTargetColor();
-        colorTransitionStep = 0;
-    }
+    QString whiteStyle = "QLabel { color: rgb(255, 255, 255); }";
+    welcomeLabel->setStyleSheet(whiteStyle);
 }
 
 void MainWindow::onUpdateWelcomeAnimation()
@@ -3036,39 +3051,12 @@ void MainWindow::onUpdateWelcomeAnimation()
     // 更新动画步骤
     welcomeAnimationStep = (welcomeAnimationStep + 1) % 360;
 
-    // 计算彩虹色渐变
-    double hue = welcomeAnimationStep * 1.0;
-    int r, g, b;
-
-    // 将HSV转换为RGB
-    double c = 1.0; // 饱和度
-    double v = 1.0; // 明度
-
-    double h = hue / 60.0;
-    double x = c * (1 - fabs(fmod(h, 2) - 1));
-
-    double r1, g1, b1;
-    if (h >= 0 && h < 1) { r1 = c; g1 = x; b1 = 0; }
-    else if (h >= 1 && h < 2) { r1 = x; g1 = c; b1 = 0; }
-    else if (h >= 2 && h < 3) { r1 = 0; g1 = c; b1 = x; }
-    else if (h >= 3 && h < 4) { r1 = 0; g1 = x; b1 = c; }
-    else if (h >= 4 && h < 5) { r1 = x; g1 = 0; b1 = c; }
-    else { r1 = c; g1 = 0; b1 = x; }
-
-    double m = v - c;
-    r = (int)((r1 + m) * 150 + 105); // 调整亮度范围
-    g = (int)((g1 + m) * 150 + 105);
-    b = (int)((b1 + m) * 150 + 105);
-
-    // 计算透明度变化
-    const double PI = 3.14159265358979323846;
-    int alpha = 200 + (int)(55.0 * (1 + sin(welcomeAnimationStep * PI / 90.0)) / 2);
-
-    // 应用颜色和透明度，但不使用渐变
-    QString stylesheet = QString("QLabel { color: rgb(%1, %2, %3); }").arg(r).arg(g).arg(b);
-    welcomeLabel->setStyleSheet(stylesheet);
+    // 保持白色，不再改变颜色
+    QString whiteStyle = "QLabel { color: rgb(255, 255, 255); }";
+    welcomeLabel->setStyleSheet(whiteStyle);
 
     // 计算字体大小变化（更细微的变化）
+    const double PI = 3.14159265358979323846;
     int fontSize = 18 + (int)(3.0 * (1 + sin(welcomeAnimationStep * PI / 90.0)) / 2);
     QFont font = welcomeLabel->font();
     font.setPointSize(fontSize);
@@ -3078,20 +3066,6 @@ void MainWindow::onUpdateWelcomeAnimation()
     // 计算位置偏移（更轻微的浮动效果）
     int offset = (int)(5.0 * sin(welcomeAnimationStep * PI / 45.0));
     welcomeLabel->move(width()/2 - welcomeLabel->width()/2, 50 + offset);
-    
-    // 添加阴影效果变化
-    int shadowOffsetX = (int)(2.0 * sin(welcomeAnimationStep * PI / 180.0));
-    int shadowOffsetY = (int)(2.0 * cos(welcomeAnimationStep * PI / 180.0));
-    int shadowAlpha = 50 + (int)(50.0 * (1 + sin(welcomeAnimationStep * PI / 60.0)) / 2);
-    
-    QString enhancedStylesheet = QString(
-        "QLabel { "
-        "color: rgb(%1, %2, %3); "
-        "text-shadow: %4px %5px %6px rgba(0, 0, 0, %7); "
-        "}").arg(r).arg(g).arg(b).arg(shadowOffsetX).arg(shadowOffsetY).arg(3).arg(shadowAlpha);
-    
-    // 注意：Qt不直接支持text-shadow，这里作为示例保留
-    // 实际应用中可以考虑使用QGraphicsDropShadowEffect
 }
 
 void MainWindow::createTempWordlist()

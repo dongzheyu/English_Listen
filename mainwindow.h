@@ -30,6 +30,9 @@
 #include <algorithm>
 #include <functional>
 
+// 当前版本号常量
+#define CURRENT_VERSION "2.6.0"
+
 // 学习结果结构体
 struct TestResult {
     QDateTime timestamp;
@@ -357,6 +360,11 @@ private:
     void showPrivacySettingsDialog();
     void loadPrivacySettings();
     void savePrivacySettings();
+    
+    // 更新功能相关函数
+    void checkForUpdates();
+    void downloadUpdate(const QString& downloadUrl);
+    bool compareVersions(const QString& currentVersion, const QString& remoteVersion);
 };
 
 #endif // MAINWINDOW_H

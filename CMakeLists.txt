@@ -169,7 +169,7 @@ set_target_properties(QtEnglishListen PROPERTIES
 set(MAIN_TARGET QtEnglishListen)
 
 # 版本定义
-set(PROJECT_VERSION "2.6.0")
+set(PROJECT_VERSION "${CURRENT_VERSION}")
 
 # 13. 核心部署逻辑
 if(WIN32)

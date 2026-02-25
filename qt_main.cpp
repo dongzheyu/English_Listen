@@ -11,7 +11,7 @@ int main(int argc, char *argv[])
     
     // 设置应用程序属性
     app.setApplicationName("英语听写练习");
-    app.setApplicationVersion("2.5.0");
+    app.setApplicationVersion(CURRENT_VERSION);
     app.setOrganizationName("English Learning Studio");
     
     // 设置应用程序图标

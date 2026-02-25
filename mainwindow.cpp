@@ -1411,7 +1411,7 @@ void MainWindow::onShowAbout()
     aboutBox.setFont(aboutFont);
     
     aboutBox.setText(
-        "<h2 style='font-family: Microsoft YaHei;'>English Listen v2.5.0</h2>"
+        "<h2 style='font-family: Microsoft YaHei;'>English Listen v" + QString(CURRENT_VERSION) + "</h2>"
         "<p style='font-family: Microsoft YaHei;'>一个帮助学习英语的听写练习工具</p>"
         "<p style='font-family: Microsoft YaHei;'>该软件基于 Qt6 框架开发，支持 Windows SAPI 和 Flite 语音引擎。</p>"
         "<h3 style='font-family: Microsoft YaHei;'>功能特点：</h3>"
@@ -3769,6 +3769,57 @@ void MainWindow::showSettingsDialog()
     
     mainLayout->addWidget(securityGroup);
     
+    // 更新设置部分
+    QGroupBox *updateGroup = new QGroupBox("更新设置", dialog);
+    QVBoxLayout *updateLayout = new QVBoxLayout(updateGroup);
+    
+    // 添加当前版本信息
+    QLabel *versionLabel = new QLabel(QString("当前版本: %1").arg(CURRENT_VERSION), dialog);
+    versionLabel->setStyleSheet("font-weight: bold; color: #333333;");
+    updateLayout->addWidget(versionLabel);
+    
+    // 添加检查更新按钮
+    QPushButton *checkUpdateButton = new QPushButton("检查更新", dialog);
+    checkUpdateButton->setStyleSheet(
+        "QPushButton { "
+        "font-family: 'Microsoft YaHei'; "
+        "font-size: 9pt; "
+        "padding: 8px 16px; "
+        "margin: 4px; "
+        "border: 2px solid #555555; "
+        "border-radius: 6px; "
+        "background-color: #ffffff; "
+        "color: #333333; "
+        "} "
+        "QPushButton:hover { "
+        "background-color: #e0e0e0; "
+        "border: 2px solid #333333; "
+        "} "
+        "QPushButton:pressed { "
+        "background-color: #d0d0d0; "
+        "border: 2px solid #000000; "
+        "} ");
+    updateLayout->addWidget(checkUpdateButton);
+    
+    // 添加更新说明
+    QLabel *updateDescription = new QLabel(
+        "点击检查更新按钮将会连接到服务器检查是否有新版本可用。"
+        "如果有新版本，程序会自动下载并安装。", dialog);
+    updateDescription->setWordWrap(true);
+    updateDescription->setStyleSheet("color: gray; font-size: 9pt;");
+    updateLayout->addWidget(updateDescription);
+    
+    mainLayout->addWidget(updateGroup);
+    
+    // 连接检查更新按钮的信号和槽
+    connect(checkUpdateButton, &QPushButton::clicked, [=]() {
+        // 隐藏设置对话框
+        dialog->hide();
+        
+        // 检查更新
+        checkForUpdates();
+    });
+    
     // 连接加密复选框的信号和槽
     connect(encryptionCheckBox, &QCheckBox::toggled, [=](bool checked) {
         if (checked) {
@@ -5530,4 +5581,224 @@ void MainWindow::savePrivacySettings()
         saveUserProfile(currentUser);
         qDebug() << "Privacy settings saved for user:" << currentUser;
     }
+}
+
+// 更新功能实现
+void MainWindow::checkForUpdates()
+{
+    // 显示检查更新提示
+    showLoadingAnimation("正在检查更新...");
+    
+    // 创建专用的网络管理器用于更新检查
+    QNetworkAccessManager* updateNetworkManager = new QNetworkAccessManager(this);
+    
+    // 创建网络请求
+    QNetworkRequest request;
+    request.setUrl(QUrl("https://gitee.com/jetcpp/english_-listen/raw/master/update.txt"));
+    request.setHeader(QNetworkRequest::UserAgentHeader, "English-Listen-Updater/1.0");
+    
+    // 发送GET请求
+    QNetworkReply* reply = updateNetworkManager->get(request);
+    
+    // 连接完成信号
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        hideLoadingAnimation(); // 隐藏加载动画
+        
+        if (reply->error() == QNetworkReply::NoError) {
+            // 读取响应数据
+            QByteArray responseData = reply->readAll();
+            QString responseText = QString::fromUtf8(responseData);
+            
+            qDebug() << "Server response:" << responseText;
+            
+            // 解析版本信息和下载链接
+            QStringList lines = responseText.split('\n', Qt::SkipEmptyParts);
+            if (lines.size() >= 2) {
+                QString remoteVersion = lines[0].trimmed();
+                QString downloadUrl = lines[1].trimmed();
+                
+                qDebug() << "Remote version:" << remoteVersion;
+                qDebug() << "Download URL:" << downloadUrl;
+                qDebug() << "Current version:" << CURRENT_VERSION;
+                
+                // 比较版本
+                if (compareVersions(CURRENT_VERSION, remoteVersion)) {
+                    // 有新版本
+                    QMessageBox::StandardButton result = QMessageBox::question(
+                        this, 
+                        "发现新版本", 
+                        QString("发现新版本 %1，当前版本为 %2。\n\n是否现在下载更新？")
+                            .arg(remoteVersion)
+                            .arg(CURRENT_VERSION),
+                        QMessageBox::Yes | QMessageBox::No
+                    );
+                    
+                    if (result == QMessageBox::Yes) {
+                        // 开始下载更新
+                        downloadUpdate(downloadUrl);
+                    }
+                } else {
+                    // 当前已是最新版本
+                    QMessageBox::information(this, "检查更新", "当前已是最新版本");
+                }
+            } else {
+                QMessageBox::warning(this, "检查更新失败", 
+                    QString("服务器返回的数据格式不正确\n收到的数据:\n%1").arg(responseText));
+            }
+        } else {
+            QMessageBox::warning(this, "检查更新失败", 
+                QString("无法连接到更新服务器: %1").arg(reply->errorString()));
+        }
+        
+        // 清理reply对象和网络管理器
+        reply->deleteLater();
+        updateNetworkManager->deleteLater();
+    });
+}
+
+void MainWindow::downloadUpdate(const QString& downloadUrl)
+{
+    // 创建临时文件路径
+    QString tempPath = QDir::tempPath();
+    QString fileName = QString("EnglishListen_Update_%1.exe").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"));
+    QString filePath = tempPath + "/" + fileName;
+    
+    qDebug() << "Downloading update to:" << filePath;
+    
+    // 创建文件
+    QFile* file = new QFile(filePath);
+    if (!file->open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, "下载失败", "无法创建临时文件");
+        delete file;
+        return;
+    }
+    
+    // 创建下载进度对话框
+    QProgressDialog* progressDialog = new QProgressDialog("正在下载更新...", "取消", 0, 100, this);
+    progressDialog->setWindowModality(Qt::WindowModal);
+    progressDialog->setMinimumDuration(0);
+    progressDialog->setValue(0);
+    
+    // 创建专用的网络管理器用于更新下载
+    QNetworkAccessManager* downloadNetworkManager = new QNetworkAccessManager(this);
+    
+    // 创建网络请求
+    QNetworkRequest request;
+    request.setUrl(QUrl(downloadUrl));
+    request.setHeader(QNetworkRequest::UserAgentHeader, "English-Listen-Updater/1.0");
+    
+    // 发送GET请求
+    QNetworkReply* reply = downloadNetworkManager->get(request);
+    
+    // 连接下载进度信号
+    connect(reply, &QNetworkReply::downloadProgress, this, [=](qint64 bytesReceived, qint64 bytesTotal) {
+        if (bytesTotal > 0) {
+            int progress = static_cast<int>((bytesReceived * 100) / bytesTotal);
+            progressDialog->setValue(progress);
+            progressDialog->setLabelText(QString("正在下载更新... (%1%)").arg(progress));
+        }
+    });
+    
+    // 连接数据接收信号
+    connect(reply, &QNetworkReply::readyRead, this, [=]() {
+        file->write(reply->readAll());
+    });
+    
+    // 连接完成信号
+    connect(reply, &QNetworkReply::finished, this, [=]() {
+        progressDialog->close();
+        progressDialog->deleteLater();
+        
+        if (reply->error() == QNetworkReply::NoError) {
+            // 下载完成
+            file->flush();
+            file->close();
+            
+            QMessageBox::information(this, "下载完成", 
+                "更新文件已下载完成，即将启动安装程序。");
+            
+            // 启动下载的更新文件
+            QProcess::startDetached(filePath);
+            
+            // 关闭当前程序
+            this->close();
+        } else {
+            // 下载失败
+            QMessageBox::warning(this, "下载失败", 
+                QString("下载更新文件失败: %1").arg(reply->errorString()));
+            
+            // 清理临时文件
+            file->close();
+            file->remove();
+        }
+        
+        // 清理资源
+        file->deleteLater();
+        reply->deleteLater();
+        downloadNetworkManager->deleteLater();
+    });
+    
+    // 连接取消信号
+    connect(progressDialog, &QProgressDialog::canceled, this, [=]() {
+        reply->abort();
+        file->close();
+        file->remove();
+        file->deleteLater();
+        reply->deleteLater();
+        downloadNetworkManager->deleteLater();
+    });
+}
+
+bool MainWindow::compareVersions(const QString& currentVersion, const QString& remoteVersion)
+{
+    qDebug() << "Comparing versions - Current:" << currentVersion << "Remote:" << remoteVersion;
+    
+    // 确保输入不为空
+    if (currentVersion.isEmpty() || remoteVersion.isEmpty()) {
+        qDebug() << "Version comparison failed: empty version string";
+        return false;
+    }
+    
+    // 简单的版本号比较
+    // 假设版本号格式为 x.y.z
+    QStringList currentParts = currentVersion.split('.', Qt::SkipEmptyParts);
+    QStringList remoteParts = remoteVersion.split('.', Qt::SkipEmptyParts);
+    
+    qDebug() << "Current parts:" << currentParts;
+    qDebug() << "Remote parts:" << remoteParts;
+    
+    // 确保都有三个部分
+    while (currentParts.size() < 3) currentParts.append("0");
+    while (remoteParts.size() < 3) remoteParts.append("0");
+    
+    // 逐个比较版本号部分
+    for (int i = 0; i < 3; i++) {
+        bool currentOk, remoteOk;
+        int currentNum = currentParts[i].toInt(&currentOk);
+        int remoteNum = remoteParts[i].toInt(&remoteOk);
+        
+        // 如果转换失败，认为该部分为0
+        if (!currentOk) {
+            currentNum = 0;
+            qDebug() << "Failed to convert current part" << i << "to integer:" << currentParts[i];
+        }
+        if (!remoteOk) {
+            remoteNum = 0;
+            qDebug() << "Failed to convert remote part" << i << "to integer:" << remoteParts[i];
+        }
+        
+        qDebug() << "Part" << i << "- Current:" << currentNum << "Remote:" << remoteNum;
+        
+        if (remoteNum > currentNum) {
+            qDebug() << "Remote version is higher";
+            return true;  // 远程版本更高
+        } else if (remoteNum < currentNum) {
+            qDebug() << "Current version is higher or equal";
+            return false; // 当前版本更高或相等
+        }
+        // 如果相等，继续比较下一部分
+    }
+    
+    qDebug() << "Versions are identical";
+    return false; // 版本号完全相同
 }

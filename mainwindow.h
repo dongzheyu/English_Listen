@@ -33,6 +33,15 @@
 // 当前版本号常量
 #define CURRENT_VERSION "2.6.0"
 
+// 按钮样式类型枚举
+enum class ButtonStyleType {
+    Default,    // 默认样式
+    Primary,    // 主要按钮样式
+    Secondary,  // 次要按钮样式
+    Danger,     // 危险操作样式（如删除）
+    Success     // 成功操作样式（如确认）
+};
+
 // 学习结果结构体
 struct TestResult {
     QDateTime timestamp;
@@ -158,13 +167,11 @@ private:
     // 单词页面控件
     QWidget *wordsWidget;
     QVBoxLayout *wordsLayout;
-    QVBoxLayout *wordButtonLayout;  // 单词界面按钮布局
+    QLayout *wordButtonLayout;  // 单词界面按钮布局
     QTextEdit *wordsTextEdit;       // 用于显示和编辑单词
     QPushButton *addWordButton;     // 添加单词按钮
     QPushButton *removeWordButton;  // 删除单词按钮
     QPushButton *clearWordsButton;  // 清空单词按钮
-    QPushButton *loadWordsButton;   // 从文件加载按钮
-    QPushButton *saveWordsButton;   // 保存到文件按钮
     QPushButton *backToHomeButton;  // 返回主页按钮
     QLineEdit *wordInput;           // 单词输入框
     
@@ -222,6 +229,10 @@ private:
     bool isValidWordlistFile(const QString &filePath); // 检查词库文件是否有效
     void loadSettings(); // 加载配置
     bool saveSettings(bool requirePasswordInput = true); // 保存配置，默认要求输入密码
+    
+    // 统一按钮样式管理
+    QString getUnifiedButtonStyle(ButtonStyleType styleType = ButtonStyleType::Default); // 获取统一按钮样式
+    void applyUnifiedButtonStyle(); // 应用统一按钮样式到所有按钮
     
     // 配置文件加密相关函数
     bool encryptConfigFile(const QString& password);
@@ -365,6 +376,9 @@ private:
     void checkForUpdates();
     void downloadUpdate(const QString& downloadUrl);
     bool compareVersions(const QString& currentVersion, const QString& remoteVersion);
+    
+    // 延迟初始化函数
+    void delayedInitialization();
 };
 
 #endif // MAINWINDOW_H

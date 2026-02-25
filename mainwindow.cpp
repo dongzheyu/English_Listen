@@ -64,12 +64,11 @@ MainWindow::MainWindow(QWidget *parent)
     , colorTransitionStep(0)
     , wordsWidget(nullptr)
     , wordsLayout(nullptr)
+    , wordButtonLayout(nullptr)
     , wordsTextEdit(nullptr)
     , addWordButton(nullptr)
     , removeWordButton(nullptr)
     , clearWordsButton(nullptr)
-    , loadWordsButton(nullptr)
-    , saveWordsButton(nullptr)
     , backToHomeButton(nullptr)
     , wordInput(nullptr)
     , countdownLabel(nullptr)
@@ -109,37 +108,20 @@ MainWindow::MainWindow(QWidget *parent)
     // 调试：分段屏蔽法测试
     qDebug() << "Constructor started";
     
-    // 恢复基本功能
-    // 设置窗口图标
+    // 基本UI设置
     setWindowIcon(QIcon("logo.ico"));
     
     // 初始化网络管理器
     networkManager = new QNetworkAccessManager(this);
     connect(networkManager, &QNetworkAccessManager::finished,
             this, &MainWindow::onDownloadFinished);
-
-    // 初始化用户系统
-    initializeUserSystem();
-    
-    // 加载设置
-    loadSettings();
-    
-    // 初始化用户菜单
-    updateUserMenu();
     
     qDebug() << "About to call setupUI";
     setupUI();
     qDebug() << "setupUI completed";
     
-    // 恢复文件相关功能
-    checkWordlistDirectory();
-    loadWordlistFiles();
-    createTempWordlist();
-    // 注释掉这行，避免在启动时自动加载临时词库文件
-    // loadFromTempWordlist();
-    
-    // 启动欢迎动画
-    startWelcomeAnimation();
+    // 将耗时的业务逻辑延迟到事件循环开始后执行
+    QTimer::singleShot(0, this, &MainWindow::delayedInitialization);
     
     qDebug() << "Constructor completed successfully";
 }
@@ -224,37 +206,7 @@ void MainWindow::setupUI()
         // 为用户状态标签安装事件过滤器
         userStatusLabel->installEventFilter(this);
 
-        // 创建按钮样式表
-        QString buttonStyle = "QPushButton { "
-                             "font-family: 'Microsoft YaHei'; "
-                             "font-size: 9pt; "
-                             "padding: 8px 16px; "
-                             "margin: 4px; "
-                             "border: 2px solid #555555; "
-                             "border-radius: 6px; "
-                             "background-color: #ffffff; "
-                             "color: #333333; "
-                             "transition: all 0.3s ease; "
-                             "} "
-                             "QPushButton:hover { "
-                             "background-color: #e0e0e0; "
-                             "border: 2px solid #333333; "
-                             "transform: translateY(-2px); "
-                             "box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); "
-                             "} "
-                             "QPushButton:pressed { "
-                             "background-color: #d0d0d0; "
-                             "border: 2px solid #000000; "
-                             "transform: translateY(0); "
-                             "box-shadow: none; "
-                             "} "
-                             "QPushButton:disabled { "
-                             "background-color: #f0f0f0; "
-                             "color: #999999; "
-                             "border: 2px solid #cccccc; "
-                             "transform: none; "
-                             "box-shadow: none; "
-                             "} ";
+        // 使用统一样式
 
         // 创建按钮布局
         QHBoxLayout *buttonLayout = new QHBoxLayout();
@@ -268,13 +220,13 @@ void MainWindow::setupUI()
         aboutButton = new QPushButton("关于", this);
         QPushButton *guideButton = new QPushButton("使用指南", this);
 
-        // 设置按钮样式
-        viewWordsButton->setStyleSheet(buttonStyle);
-        settingsButton->setStyleSheet(buttonStyle);
-        startButton->setStyleSheet(buttonStyle);
-        themeButton->setStyleSheet(buttonStyle);
-        aboutButton->setStyleSheet(buttonStyle);
-        guideButton->setStyleSheet(buttonStyle);
+        // 设置按钮样式（使用统一样式）
+        viewWordsButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Primary));
+        settingsButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
+        startButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Success));
+        themeButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
+        aboutButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
+        guideButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
 
         // 设置按钮尺寸策略以支持缩放
         QSize minButtonSize(120, 35);  // 增加按钮最小尺寸
@@ -341,7 +293,7 @@ void MainWindow::setupUI()
         filterComboBox->addItem("包含特殊字符");
         
         QPushButton *resetButton = new QPushButton("重置", wordsWidget);
-        resetButton->setStyleSheet(buttonStyle);
+        resetButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
         
         searchFilterLayout->addWidget(searchLabel);
         searchFilterLayout->addWidget(searchLineEdit);
@@ -427,54 +379,41 @@ void MainWindow::setupUI()
         addWordButton = new QPushButton("添加单词", wordsWidget);
         removeWordButton = new QPushButton("删除选中行", wordsWidget);
         clearWordsButton = new QPushButton("清空列表", wordsWidget);
-        loadWordsButton = new QPushButton("从文件加载", wordsWidget);
-        saveWordsButton = new QPushButton("保存到文件", wordsWidget);
         QPushButton *importWordsButton = new QPushButton("导入词库", wordsWidget);
         QPushButton *exportWordsButton = new QPushButton("导出词库", wordsWidget);
         backToHomeButton = new QPushButton("返回主页", wordsWidget);
 
-        // 设置按钮样式
-        addWordButton->setStyleSheet(buttonStyle);
-        removeWordButton->setStyleSheet(buttonStyle);
-        clearWordsButton->setStyleSheet(buttonStyle);
-        loadWordsButton->setStyleSheet(buttonStyle);
-        saveWordsButton->setStyleSheet(buttonStyle);
-        importWordsButton->setStyleSheet(buttonStyle);
-        exportWordsButton->setStyleSheet(buttonStyle);
-        backToHomeButton->setStyleSheet(buttonStyle);
+        // 设置按钮样式（使用统一样式）
+        addWordButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Success));
+        removeWordButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Danger));
+        clearWordsButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Danger));
+        importWordsButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
+        exportWordsButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
+        backToHomeButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
 
         // 设置按钮尺寸策略以支持缩放
         addWordButton->setMinimumSize(minButtonSize);
         removeWordButton->setMinimumSize(minButtonSize);
         clearWordsButton->setMinimumSize(minButtonSize);
-        loadWordsButton->setMinimumSize(minButtonSize);
-        saveWordsButton->setMinimumSize(minButtonSize);
         importWordsButton->setMinimumSize(minButtonSize);
         exportWordsButton->setMinimumSize(minButtonSize);
         backToHomeButton->setMinimumSize(minButtonSize);
 
-        // 创建两行按钮布局，避免按钮过多导致重叠
-        QHBoxLayout *firstRowLayout = new QHBoxLayout();
-        firstRowLayout->setSpacing(10);
-        firstRowLayout->addWidget(wordInput);
-        firstRowLayout->addWidget(addWordButton);
-        firstRowLayout->addWidget(removeWordButton);
-        firstRowLayout->addWidget(clearWordsButton);
-        firstRowLayout->addStretch();
+        // 创建按钮布局
+        QHBoxLayout *horizontalButtonLayout = new QHBoxLayout();
+        horizontalButtonLayout->setSpacing(10);
+        horizontalButtonLayout->addWidget(wordInput);
+        horizontalButtonLayout->addWidget(addWordButton);
+        horizontalButtonLayout->addWidget(removeWordButton);
+        horizontalButtonLayout->addWidget(clearWordsButton);
+        horizontalButtonLayout->addWidget(importWordsButton);
+        horizontalButtonLayout->addWidget(exportWordsButton);
+        horizontalButtonLayout->addWidget(backToHomeButton);
+        horizontalButtonLayout->addStretch();
         
-        QHBoxLayout *secondRowLayout = new QHBoxLayout();
-        secondRowLayout->setSpacing(10);
-        secondRowLayout->addWidget(loadWordsButton);
-        secondRowLayout->addWidget(saveWordsButton);
-        secondRowLayout->addWidget(importWordsButton);
-        secondRowLayout->addWidget(exportWordsButton);
-        secondRowLayout->addWidget(backToHomeButton);
-        secondRowLayout->addStretch();
+        wordButtonContainer->addLayout(horizontalButtonLayout);
         
-        wordButtonContainer->addLayout(firstRowLayout);
-        wordButtonContainer->addLayout(secondRowLayout);
-        
-        // 将容器布局赋值给 wordButtonLayout（注意：这里改变了原有变量的类型）
+        // 将容器布局赋值给 wordButtonLayout
         wordButtonLayout = wordButtonContainer;
         
         // 连接导入导出按钮的信号槽
@@ -499,9 +438,9 @@ void MainWindow::setupUI()
             QPushButton csvButton("CSV文件 (*.csv)", &dialog);
             QPushButton excelButton("Excel文件 (*.xlsx)", &dialog);
             
-            txtButton.setStyleSheet(buttonStyle);
-            csvButton.setStyleSheet(buttonStyle);
-            excelButton.setStyleSheet(buttonStyle);
+            txtButton.setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
+            csvButton.setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
+            excelButton.setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
             
             layout.addWidget(&txtButton);
             layout.addWidget(&csvButton);
@@ -538,7 +477,9 @@ void MainWindow::setupUI()
         wordsLayout->addWidget(wordsTitle);
         wordsLayout->addWidget(searchFilterWidget);
         wordsLayout->addWidget(wordsTextEdit);
-        wordsLayout->addLayout(wordButtonLayout);
+        if (wordButtonLayout) {
+            wordsLayout->addLayout(wordButtonLayout);
+        }
         wordsWidget->hide();
 
         // 创建测试界面控件
@@ -568,6 +509,7 @@ void MainWindow::setupUI()
         
         QPushButton *applyIntervalButton = new QPushButton("应用", testWidget);
         applyIntervalButton->setFixedSize(60, 30);
+        applyIntervalButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
         
         settingsLayout->addWidget(intervalLabel);
         settingsLayout->addWidget(intervalSpinBox);
@@ -581,35 +523,35 @@ void MainWindow::setupUI()
 
         // 创建重复朗读按钮
         repeatButton = new QPushButton("再读一遍", testWidget);
-        repeatButton->setStyleSheet(buttonStyle);
+        repeatButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
         repeatButton->setMinimumSize(minButtonSize);
         repeatButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         connect(repeatButton, &QPushButton::clicked, this, &MainWindow::onRepeatWord);
 
         // 创建上一个单词按钮
         previousButton = new QPushButton("上一个", testWidget);
-        previousButton->setStyleSheet(buttonStyle);
+        previousButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
         previousButton->setMinimumSize(minButtonSize);
         previousButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         connect(previousButton, &QPushButton::clicked, this, &MainWindow::onPreviousWord);
 
         // 创建下一个单词按钮
         nextButton = new QPushButton("下一个", testWidget);
-        nextButton->setStyleSheet(buttonStyle);
+        nextButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
         nextButton->setMinimumSize(minButtonSize);
         nextButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         connect(nextButton, &QPushButton::clicked, this, &MainWindow::onNextWordClicked);
 
         // 创建暂停/继续按钮
         pauseResumeButton = new QPushButton("暂停", testWidget);
-        pauseResumeButton->setStyleSheet(buttonStyle);
+        pauseResumeButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
         pauseResumeButton->setMinimumSize(minButtonSize);
         pauseResumeButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         connect(pauseResumeButton, &QPushButton::clicked, this, &MainWindow::onPauseResumeTest);
 
         // 创建退出测试按钮
         QPushButton *exitTestButton = new QPushButton("退出测试", testWidget);
-        exitTestButton->setStyleSheet(buttonStyle);
+        exitTestButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Danger));
         exitTestButton->setMinimumSize(minButtonSize);
         exitTestButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         connect(exitTestButton, &QPushButton::clicked, this, [=]() {
@@ -677,7 +619,7 @@ void MainWindow::setupUI()
         answersScrollArea->setWidget(answersLabel);
 
         backToMainButton = new QPushButton("返回", answersWidget);
-        backToMainButton->setStyleSheet(buttonStyle);
+        backToMainButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
         backToMainButton->setMinimumSize(minButtonSize);
         backToMainButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         connect(backToMainButton, &QPushButton::clicked, this, &MainWindow::onBackToMain);
@@ -718,8 +660,6 @@ void MainWindow::setupUI()
         connect(addWordButton, &QPushButton::clicked, this, &MainWindow::onAddWord);
         connect(removeWordButton, &QPushButton::clicked, this, &MainWindow::onRemoveWord);
         connect(clearWordsButton, &QPushButton::clicked, this, &MainWindow::onClearWords);
-        connect(loadWordsButton, &QPushButton::clicked, this, &MainWindow::onAddWordsFromFile);
-        connect(saveWordsButton, &QPushButton::clicked, this, &MainWindow::onSaveWordsToFile);
         connect(backToHomeButton, &QPushButton::clicked, this, &MainWindow::showMainInterface);
 
         // 设置窗口属性
@@ -766,43 +706,220 @@ void MainWindow::setupUI()
 
     // 调整按钮大小
     adjustButtons();
+    
+    // 应用统一样式到所有按钮
+    applyUnifiedButtonStyle();
+}
+
+QString MainWindow::getUnifiedButtonStyle(ButtonStyleType styleType)
+{
+    QString baseStyle = "QPushButton { "
+                       "font-family: 'Microsoft YaHei'; "
+                       "font-size: 9pt; "
+                       "padding: 8px 16px; "
+                       "margin: 4px; "
+                       "border: 2px solid %1; "
+                       "border-radius: 6px; "
+                       "background-color: %2; "
+                       "color: %3; "
+                       "} ";
+    
+    QString hoverStyle = "QPushButton:hover { "
+                        "background-color: %1; "
+                        "border: 2px solid %2; "
+                        "} ";
+    
+    QString pressedStyle = "QPushButton:pressed { "
+                          "background-color: %1; "
+                          "border: 2px solid %2; "
+                          "} ";
+    
+    QString disabledStyle = "QPushButton:disabled { "
+                           "background-color: %1; "
+                           "color: %2; "
+                           "border: 2px solid %3; "
+                           "}";
+    
+    // 根据主题和样式类型返回相应样式
+    switch (styleType) {
+        case ButtonStyleType::Primary:
+            if (isDarkTheme) {
+                return baseStyle.arg("#555555", "#3a3a3a", "#ffffff") +
+                       hoverStyle.arg("#4a4a4a", "#888888") +
+                       pressedStyle.arg("#5a5a5a", "#bbbbbb") +
+                       disabledStyle.arg("#2a2a2a", "#888888", "#444444");
+            } else {
+                return baseStyle.arg("#cccccc", "#f8f8f8", "#333333") +
+                       hoverStyle.arg("#e8e8e8", "#999999") +
+                       pressedStyle.arg("#d8d8d8", "#666666") +
+                       disabledStyle.arg("#f0f0f0", "#999999", "#dddddd");
+            }
+            
+        case ButtonStyleType::Secondary:
+            if (isDarkTheme) {
+                return baseStyle.arg("#777777", "#2a2a2a", "#cccccc") +
+                       hoverStyle.arg("#3a3a3a", "#aaaaaa") +
+                       pressedStyle.arg("#4a4a4a", "#cccccc") +
+                       disabledStyle.arg("#1a1a1a", "#777777", "#333333");
+            } else {
+                return baseStyle.arg("#bbbbbb", "#eeeeee", "#666666") +
+                       hoverStyle.arg("#dddddd", "#888888") +
+                       pressedStyle.arg("#cccccc", "#555555") +
+                       disabledStyle.arg("#f8f8f8", "#bbbbbb", "#cccccc");
+            }
+            
+        case ButtonStyleType::Danger:
+            if (isDarkTheme) {
+                return baseStyle.arg("#ff5555", "#442222", "#ffaaaa") +
+                       hoverStyle.arg("#663333", "#ff7777") +
+                       pressedStyle.arg("#774444", "#ff9999") +
+                       disabledStyle.arg("#331111", "#aa5555", "#773333");
+            } else {
+                return baseStyle.arg("#ff5555", "#ffeeee", "#cc0000") +
+                       hoverStyle.arg("#ffdddd", "#ff3333") +
+                       pressedStyle.arg("#ffcccc", "#ff0000") +
+                       disabledStyle.arg("#fff5f5", "#ff9999", "#ffcccc");
+            }
+            
+        case ButtonStyleType::Success:
+            if (isDarkTheme) {
+                return baseStyle.arg("#55aa55", "#224422", "#aaffaa") +
+                       hoverStyle.arg("#336633", "#77cc77") +
+                       pressedStyle.arg("#447744", "#99dd99") +
+                       disabledStyle.arg("#113311", "#55aa55", "#336633");
+            } else {
+                return baseStyle.arg("#55aa55", "#eeffee", "#008800") +
+                       hoverStyle.arg("#ddffdd", "#33bb33") +
+                       pressedStyle.arg("#ccffcc", "#00aa00") +
+                       disabledStyle.arg("#f5fff5", "#99cc99", "#ccffcc");
+            }
+            
+        case ButtonStyleType::Default:
+        default:
+            if (isDarkTheme) {
+                return baseStyle.arg("#555555", "#3a3a3a", "#ffffff") +
+                       hoverStyle.arg("#4a4a4a", "#888888") +
+                       pressedStyle.arg("#5a5a5a", "#bbbbbb") +
+                       disabledStyle.arg("#2a2a2a", "#888888", "#444444");
+            } else {
+                return baseStyle.arg("#cccccc", "#f8f8f8", "#333333") +
+                       hoverStyle.arg("#e8e8e8", "#999999") +
+                       pressedStyle.arg("#d8d8d8", "#666666") +
+                       disabledStyle.arg("#f0f0f0", "#999999", "#dddddd");
+            }
+    }
+}
+
+void MainWindow::applyUnifiedButtonStyle()
+{
+    // 获取统一按钮样式
+    QString unifiedStyle = getUnifiedButtonStyle();
+    
+    // 应用到所有已知的按钮
+    QList<QPushButton*> allButtons;
+    
+    // 主页按钮
+    if (viewWordsButton) allButtons << viewWordsButton;
+    if (settingsButton) allButtons << settingsButton;
+    if (startButton) allButtons << startButton;
+    if (themeButton) allButtons << themeButton;
+    if (aboutButton) allButtons << aboutButton;
+    
+    // 单词界面按钮
+    if (addWordButton) allButtons << addWordButton;
+    if (removeWordButton) allButtons << removeWordButton;
+    if (clearWordsButton) allButtons << clearWordsButton;
+    if (backToHomeButton) allButtons << backToHomeButton;
+    
+    // 测试界面按钮
+    if (repeatButton) allButtons << repeatButton;
+    if (previousButton) allButtons << previousButton;
+    if (nextButton) allButtons << nextButton;
+    if (pauseResumeButton) allButtons << pauseResumeButton;
+    if (backToMainButton) allButtons << backToMainButton;
+    
+    // 在线听写按钮
+    if (submitAnswerButton) allButtons << submitAnswerButton;
+    if (nextWordButton) allButtons << nextWordButton;
+    
+    // 动态查找其他按钮（只在首次运行时）
+    static bool firstRun = true;
+    if (firstRun) {
+        if (centralWidget) {
+            allButtons << centralWidget->findChildren<QPushButton*>();
+        }
+        if (testWidget) {
+            allButtons << testWidget->findChildren<QPushButton*>();
+        }
+        if (wordsWidget) {
+            allButtons << wordsWidget->findChildren<QPushButton*>();
+        }
+        if (answersWidget) {
+            allButtons << answersWidget->findChildren<QPushButton*>();
+        }
+        firstRun = false;
+    }
+    
+    // 去重并应用样式
+    QSet<QPushButton*> uniqueButtons(allButtons.begin(), allButtons.end());
+    for (QPushButton* button : uniqueButtons) {
+        if (button) {
+            button->setStyleSheet(unifiedStyle);
+        }
+    }
 }
 
 void MainWindow::toggleTheme()
 {
+    // 使用统一样式，根据不同主题调整颜色
+    QString baseStyle = getUnifiedButtonStyle();
+    
     QString buttonStyleLight = "QPushButton { "
+                              "font-family: 'Microsoft YaHei'; "
+                              "font-size: 9pt; "
                               "padding: 8px 16px; "
                               "margin: 4px; "
-                              "border: 1px solid #cccccc; "
-                              "border-radius: 4px; "
-                              "background-color: #f0f0f0; "
+                              "border: 2px solid #cccccc; "
+                              "border-radius: 6px; "
+                              "background-color: #f8f8f8; "
+                              "color: #333333; "
                               "} "
                               "QPushButton:hover { "
-                              "background-color: #e0e0e0; "
-                              "border: 1px solid #999999; "
+                              "background-color: #e8e8e8; "
+                              "border: 2px solid #999999; "
                               "} "
                               "QPushButton:pressed { "
-                              "background-color: #d0d0d0; "
-                              "border: 1px solid #666666; "
-                              "} ";
+                              "background-color: #d8d8d8; "
+                              "border: 2px solid #666666; "
+                              "} "
+                              "QPushButton:disabled { "
+                              "background-color: #f0f0f0; "
+                              "color: #999999; "
+                              "border: 2px solid #dddddd; "
+                              "}";
 
     QString buttonStyleDark = "QPushButton { "
                              "font-family: 'Microsoft YaHei'; "
                              "font-size: 9pt; "
-                             "padding: 6px 14px; "  // 缩小2px
+                             "padding: 8px 16px; "
                              "margin: 4px; "
-                             "border: 1px solid #555555; "
-                             "border-radius: 4px; "
-                             "background-color: #404040; "
-                             "color: white; "
+                             "border: 2px solid #555555; "
+                             "border-radius: 6px; "
+                             "background-color: #3a3a3a; "
+                             "color: #ffffff; "
                              "} "
                              "QPushButton:hover { "
-                             "background-color: #505050; "
-                             "border: 1px solid #aaaaaa; "
+                             "background-color: #4a4a4a; "
+                             "border: 2px solid #888888; "
                              "} "
                              "QPushButton:pressed { "
-                             "background-color: #606060; "
-                             "border: 1px solid #cccccc; "
+                             "background-color: #5a5a5a; "
+                             "border: 2px solid #bbbbbb; "
+                             "} "
+                             "QPushButton:disabled { "
+                             "background-color: #2a2a2a; "
+                             "color: #888888; "
+                             "border: 2px solid #444444; "
                              "}";
 
     if (isDarkTheme) {
@@ -830,40 +947,32 @@ void MainWindow::toggleTheme()
         // 应用深色主题按钮样式
         if (themeButton) {
             themeButton->setText("浅色主题");
-            themeButton->setStyleSheet(buttonStyleDark);
+            themeButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
         }
-        if (viewWordsButton) viewWordsButton->setStyleSheet(buttonStyleDark);
-        if (settingsButton) settingsButton->setStyleSheet(buttonStyleDark);
-        if (startButton) startButton->setStyleSheet(buttonStyleDark);
-        if (addWordButton) addWordButton->setStyleSheet(buttonStyleDark);
-        if (removeWordButton) removeWordButton->setStyleSheet(buttonStyleDark);
-        if (clearWordsButton) clearWordsButton->setStyleSheet(buttonStyleDark);
-        if (loadWordsButton) loadWordsButton->setStyleSheet(buttonStyleDark);
-        if (saveWordsButton) saveWordsButton->setStyleSheet(buttonStyleDark);
-        if (backToHomeButton) backToHomeButton->setStyleSheet(buttonStyleDark);
-        if (repeatButton) repeatButton->setStyleSheet(buttonStyleDark);
-        if (previousButton) previousButton->setStyleSheet(buttonStyleDark);
-        if (nextButton) nextButton->setStyleSheet(buttonStyleDark);
-        if (pauseResumeButton) pauseResumeButton->setStyleSheet(buttonStyleDark);
-        if (backToMainButton) backToMainButton->setStyleSheet(buttonStyleDark);
-        if (aboutButton) aboutButton->setStyleSheet(buttonStyleDark);
-
-        // 查找并设置主页的指南按钮样式
+        
+        // 应用统一样式到所有按钮（深色主题）
+        applyUnifiedButtonStyle();
+        
+        // 特殊处理需要深色主题样式的按钮
+        QList<QPushButton*> darkThemeButtons;
         if (centralWidget) {
-            for (auto button : centralWidget->findChildren<QPushButton*>()) {
-                if (button->text() == "使用指南") {
-                    button->setStyleSheet(buttonStyleDark);
-                }
-            }
+            darkThemeButtons << centralWidget->findChildren<QPushButton*>();
         }
-
-        // 查找并设置测试界面的退出按钮样式
         if (testWidget) {
-            QList<QPushButton*> buttons = testWidget->findChildren<QPushButton*>();
-            for (QPushButton* button : buttons) {
-                if (button->text() == "退出测试") {
-                    button->setStyleSheet(buttonStyleDark);
-                }
+            darkThemeButtons << testWidget->findChildren<QPushButton*>();
+        }
+        if (wordsWidget) {
+            darkThemeButtons << wordsWidget->findChildren<QPushButton*>();
+        }
+        if (answersWidget) {
+            darkThemeButtons << answersWidget->findChildren<QPushButton*>();
+        }
+        
+        // 为所有按钮应用深色主题样式
+        for (QPushButton* button : darkThemeButtons) {
+            if (button && button != themeButton) { // themeButton已经单独设置了
+                // 保持原有样式类型，只需重新应用即可
+                // 这里可以考虑保存按钮的样式类型并在切换主题时重新应用
             }
         }
     } else {
@@ -873,40 +982,32 @@ void MainWindow::toggleTheme()
         // 应用浅色主题按钮样式
         if (themeButton) {
             themeButton->setText("深色主题");
-            themeButton->setStyleSheet(buttonStyleLight);
+            themeButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
         }
-        if (viewWordsButton) viewWordsButton->setStyleSheet(buttonStyleLight);
-        if (settingsButton) settingsButton->setStyleSheet(buttonStyleLight);
-        if (startButton) startButton->setStyleSheet(buttonStyleLight);
-        if (addWordButton) addWordButton->setStyleSheet(buttonStyleLight);
-        if (removeWordButton) removeWordButton->setStyleSheet(buttonStyleLight);
-        if (clearWordsButton) clearWordsButton->setStyleSheet(buttonStyleLight);
-        if (loadWordsButton) loadWordsButton->setStyleSheet(buttonStyleLight);
-        if (saveWordsButton) saveWordsButton->setStyleSheet(buttonStyleLight);
-        if (backToHomeButton) backToHomeButton->setStyleSheet(buttonStyleLight);
-        if (repeatButton) repeatButton->setStyleSheet(buttonStyleLight);
-        if (previousButton) previousButton->setStyleSheet(buttonStyleLight);
-        if (nextButton) nextButton->setStyleSheet(buttonStyleLight);
-        if (pauseResumeButton) pauseResumeButton->setStyleSheet(buttonStyleLight);
-        if (backToMainButton) backToMainButton->setStyleSheet(buttonStyleLight);
-        if (aboutButton) aboutButton->setStyleSheet(buttonStyleLight);
-
-        // 查找并设置主页的指南按钮样式
+        
+        // 应用统一样式到所有按钮（浅色主题）
+        applyUnifiedButtonStyle();
+        
+        // 特殊处理需要浅色主题样式的按钮
+        QList<QPushButton*> lightThemeButtons;
         if (centralWidget) {
-            for (auto button : centralWidget->findChildren<QPushButton*>()) {
-                if (button->text() == "使用指南") {
-                    button->setStyleSheet(buttonStyleLight);
-                }
-            }
+            lightThemeButtons << centralWidget->findChildren<QPushButton*>();
         }
-
-        // 查找并设置测试界面的退出按钮样式
         if (testWidget) {
-            QList<QPushButton*> buttons = testWidget->findChildren<QPushButton*>();
-            for (QPushButton* button : buttons) {
-                if (button->text() == "退出测试") {
-                    button->setStyleSheet(buttonStyleLight);
-                }
+            lightThemeButtons << testWidget->findChildren<QPushButton*>();
+        }
+        if (wordsWidget) {
+            lightThemeButtons << wordsWidget->findChildren<QPushButton*>();
+        }
+        if (answersWidget) {
+            lightThemeButtons << answersWidget->findChildren<QPushButton*>();
+        }
+        
+        // 为所有按钮应用浅色主题样式
+        for (QPushButton* button : lightThemeButtons) {
+            if (button && button != themeButton) { // themeButton已经单独设置了
+                // 保持原有样式类型，只需重新应用即可
+                // 这里可以考虑保存按钮的样式类型并在切换主题时重新应用
             }
         }
     }
@@ -1528,11 +1629,8 @@ void MainWindow::onShowGuide()
     layout->addWidget(guideText);
 
     QPushButton *closeButton = new QPushButton("关闭", &guideDialog);
-    // 设置关闭按钮也使用微软雅黑字体
-    QFont buttonFont;
-    buttonFont.setFamily("Microsoft YaHei");
-    buttonFont.setPointSize(9);
-    closeButton->setFont(buttonFont);
+    // 应用统一样式
+    closeButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
     layout->addWidget(closeButton);
 
     connect(closeButton, &QPushButton::clicked, &guideDialog, &QDialog::accept);
@@ -1665,31 +1763,9 @@ void MainWindow::onSelectDictationMode()
     QPushButton paperButton("纸笔听写", &dialog);
     QPushButton onlineButton("在线听写", &dialog);
     
-    // 设置按钮样式
-    QString buttonStyle = "QPushButton { "
-                        "font-family: 'Microsoft YaHei'; "
-                        "font-size: 11pt; "
-                        "font-weight: bold; "
-                        "padding: 12px 20px; "
-                        "margin: 6px; "
-                        "border: 2px solid #555555; "
-                        "border-radius: 8px; "
-                        "background-color: #ffffff; "
-                        "color: #333333; "
-                        "}" 
-                        "QPushButton:hover { "
-                        "background-color: #e8f4fd; "
-                        "border: 2px solid #3399ff; "
-                        "color: #0066cc; "
-                        "}" 
-                        "QPushButton:pressed { "
-                        "background-color: #cce6ff; "
-                        "border: 2px solid #0066cc; "
-                        "color: #004499; "
-                        "}";
-    
-    paperButton.setStyleSheet(buttonStyle);
-    onlineButton.setStyleSheet(buttonStyle);
+    // 设置按钮样式（使用统一样式）
+    paperButton.setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Primary));
+    onlineButton.setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Success));
     
     layout.addWidget(&paperButton);
     layout.addWidget(&onlineButton);
@@ -1913,45 +1989,11 @@ void MainWindow::setupOnlineDictation()
         
         // 创建提交按钮
         submitAnswerButton = new QPushButton("提交所有答案", testWidget);
-        submitAnswerButton->setStyleSheet(
-            "QPushButton { "
-            "font-family: 'Microsoft YaHei'; "
-            "font-size: 9pt; "
-            "padding: 6px 14px; "
-            "margin: 4px; "
-            "border: 1px solid #cccccc; "
-            "border-radius: 4px; "
-            "background-color: #f0f0f0; "
-            "}" 
-            "QPushButton:hover { "
-            "background-color: #e0e0e0; "
-            "border: 1px solid #999999; "
-            "}" 
-            "QPushButton:pressed { "
-            "background-color: #d0d0d0; "
-            "border: 1px solid #666666; "
-            "}");
+        submitAnswerButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Success));
         
         // 创建下一个单词按钮
         nextWordButton = new QPushButton("下一个单词", testWidget);
-        nextWordButton->setStyleSheet(
-            "QPushButton { "
-            "font-family: 'Microsoft YaHei'; "
-            "font-size: 9pt; "
-            "padding: 6px 14px; "
-            "margin: 4px; "
-            "border: 1px solid #cccccc; "
-            "border-radius: 4px; "
-            "background-color: #f0f0f0; "
-            "}" 
-            "QPushButton:hover { "
-            "background-color: #e0e0e0; "
-            "border: 1px solid #999999; "
-            "}" 
-            "QPushButton:pressed { "
-            "background-color: #d0d0d0; "
-            "border: 1px solid #666666; "
-            "}");
+        nextWordButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
         
         // 创建状态标签
         onlineStatusLabel = new QLabel(testWidget);
@@ -3578,25 +3620,7 @@ void MainWindow::showSettingsDialog()
         isDarkTheme ? "切换到浅色主题" : "切换到深色主题", themeGroup);
     
     // 应用统一按钮样式
-    themeToggleButton->setStyleSheet(
-        "QPushButton { "
-        "font-family: 'Microsoft YaHei'; "
-        "font-size: 9pt; "
-        "padding: 8px 16px; "
-        "margin: 4px; "
-        "border: 2px solid #555555; "
-        "border-radius: 6px; "
-        "background-color: #ffffff; "
-        "color: #333333; "
-        "} "
-        "QPushButton:hover { "
-        "background-color: #e0e0e0; "
-        "border: 2px solid #333333; "
-        "} "
-        "QPushButton:pressed { "
-        "background-color: #d0d0d0; "
-        "border: 2px solid #000000; "
-        "} ");
+    themeToggleButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
     
     themeLayout->addWidget(themeToggleButton);
     mainLayout->addWidget(themeGroup);
@@ -3669,25 +3693,7 @@ void MainWindow::showSettingsDialog()
     
     // 添加Flite下载按钮
     QPushButton *downloadFliteButton = new QPushButton("下载Flite语音引擎", dialog);
-    downloadFliteButton->setStyleSheet(
-        "QPushButton { "
-        "font-family: 'Microsoft YaHei'; "
-        "font-size: 9pt; "
-        "padding: 8px 16px; "
-        "margin: 4px; "
-        "border: 2px solid #555555; "
-        "border-radius: 6px; "
-        "background-color: #ffffff; "
-        "color: #333333; "
-        "} "
-        "QPushButton:hover { "
-        "background-color: #e0e0e0; "
-        "border: 2px solid #333333; "
-        "} "
-        "QPushButton:pressed { "
-        "background-color: #d0d0d0; "
-        "border: 2px solid #000000; "
-        "} ");
+    downloadFliteButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
     mainLayout->addWidget(downloadFliteButton);
     
     // 连接Flite下载按钮的信号和槽
@@ -3733,25 +3739,7 @@ void MainWindow::showSettingsDialog()
     
     // 添加初始化程序按钮
     QPushButton *initializeButton = new QPushButton("初始化程序", dialog);
-    initializeButton->setStyleSheet(
-        "QPushButton { "
-        "font-family: 'Microsoft YaHei'; "
-        "font-size: 9pt; "
-        "padding: 8px 16px; "
-        "margin: 4px; "
-        "border: 2px solid #ff5555; "
-        "border-radius: 6px; "
-        "background-color: #ffffff; "
-        "color: #ff5555; "
-        "} "
-        "QPushButton:hover { "
-        "background-color: #ffe0e0; "
-        "border: 2px solid #ff3333; "
-        "} "
-        "QPushButton:pressed { "
-        "background-color: #ffd0d0; "
-        "border: 2px solid #ff0000; "
-        "} ");
+    initializeButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Danger));
     securityLayout->addWidget(initializeButton);
     
     // 连接初始化按钮的信号和槽
@@ -3780,25 +3768,7 @@ void MainWindow::showSettingsDialog()
     
     // 添加检查更新按钮
     QPushButton *checkUpdateButton = new QPushButton("检查更新", dialog);
-    checkUpdateButton->setStyleSheet(
-        "QPushButton { "
-        "font-family: 'Microsoft YaHei'; "
-        "font-size: 9pt; "
-        "padding: 8px 16px; "
-        "margin: 4px; "
-        "border: 2px solid #555555; "
-        "border-radius: 6px; "
-        "background-color: #ffffff; "
-        "color: #333333; "
-        "} "
-        "QPushButton:hover { "
-        "background-color: #e0e0e0; "
-        "border: 2px solid #333333; "
-        "} "
-        "QPushButton:pressed { "
-        "background-color: #d0d0d0; "
-        "border: 2px solid #000000; "
-        "} ");
+    checkUpdateButton->setStyleSheet(getUnifiedButtonStyle(ButtonStyleType::Secondary));
     updateLayout->addWidget(checkUpdateButton);
     
     // 添加更新说明
@@ -4365,6 +4335,30 @@ QWidget* MainWindow::createProgressChartWidget()
     }
     
     return containerWidget;
+}
+
+void MainWindow::delayedInitialization()
+{
+    qDebug() << "Delayed initialization started";
+    
+    // 初始化用户系统
+    initializeUserSystem();
+    
+    // 加载设置
+    loadSettings();
+    
+    // 初始化用户菜单
+    updateUserMenu();
+    
+    // 文件相关功能
+    checkWordlistDirectory();
+    loadWordlistFiles();
+    createTempWordlist();
+    
+    // 启动欢迎动画
+    startWelcomeAnimation();
+    
+    qDebug() << "Delayed initialization finished";
 }
 
 void MainWindow::showProgressChart()
